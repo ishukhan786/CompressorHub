@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Upload, Sparkles, AlertCircle, FileCheck2 } from 'lucide-react';
+import { Upload, Sparkles, AlertCircle, FileCheck2, Lock } from 'lucide-react';
 import { CompressorType } from '../types';
 import { COMPRESSORS } from '../data/compressors';
 
@@ -118,13 +118,18 @@ export function Dropzone({ activeCategory, onFilesSelected }: DropzoneProps) {
 
           {/* Format Badges */}
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/10 dark:border-emerald-500/20 backdrop-blur-md">
+              <Lock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Zero-Storage Privacy</span>
+            </span>
+
             {currentTool ? (
               <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-200 dark:border-indigo-400/30 backdrop-blur-md">
                 <FileCheck2 className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-300" />
                 Target Tool: {currentTool.title} ({currentTool.extensions.join(', ')})
               </span>
             ) : (
-              <span className="text-xs text-slate-600 dark:text-indigo-200/70 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/80 dark:bg-white/5 border border-slate-200 dark:border-white/10 backdrop-blur-md">
+              <span className="text-xs text-slate-600 dark:text-indigo-200/70 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/80 dark:bg-white/5 border border-slate-200 dark:border-white/10 backdrop-blur-md">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-300" />
                 Supports JPG, PNG, WebP, AVIF, PDF, MP4, MOV, MP3, ZIP, DOCX, XLSX, PPTX (Up to 1GB)
               </span>

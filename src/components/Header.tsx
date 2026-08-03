@@ -97,11 +97,6 @@ export function Header({
 
           {/* Right Action Controls */}
           <div className="flex items-center gap-2.5">
-            {/* Privacy Badge */}
-            <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 dark:text-emerald-300 dark:bg-emerald-500/10 dark:border-emerald-500/20 backdrop-blur-md">
-              <Lock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span>Zero-Storage Privacy</span>
-            </div>
 
             {/* Dark / Light Mode Toggle */}
             <button
