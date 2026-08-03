@@ -41,6 +41,7 @@ export interface FileItem {
   error?: string;
   processingTimeMs?: number;
   finalFormat?: string;
+  warning?: string;
   estimatedSeconds?: number;
   settings: CompressionSettings;
 }

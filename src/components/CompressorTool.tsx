@@ -131,6 +131,7 @@ export function CompressorTool({
         compressedUrl: res.dataUrl,
         processingTimeMs: res.processingTimeMs,
         finalFormat: res.finalFormat,
+        warning: res.warning,
         settings,
       };
       onUpdateFile(completedItem);
@@ -902,6 +903,12 @@ export function CompressorTool({
                       <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{fileItem.processingTimeMs ? `${(fileItem.processingTimeMs / 1000).toFixed(2)}s` : '< 0.1s'}</p>
                     </div>
                   </div>
+                  {fileItem.warning && (
+                    <div className="mt-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs font-medium text-amber-600 dark:text-amber-400 flex items-start gap-2">
+                      <span className="font-bold">Note:</span>
+                      <span>{fileItem.warning}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

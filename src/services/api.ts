@@ -11,6 +11,7 @@ export interface CompressResponse {
   finalFormat: string;
   category: string;
   dataUrl: string;
+  warning?: string;
 }
 
 export async function compressFileApi(
@@ -118,17 +119,11 @@ async function clientSideCompressFallback(
     });
   }
 
-  // Non-image fallback simulation with authentic ratio
-  const ratio = Math.max(0.35, quality * 0.75);
-  let compressedSize = Math.max(Math.round(file.size * ratio), 512);
-
-  // Enforce strict limit from targetSizeKb
-  if (settings.targetSizeKb && settings.targetSizeKb > 0) {
-    compressedSize = Math.min(compressedSize, Math.floor(settings.targetSizeKb * 1024 * 0.95));
-  }
-
-  const savedBytes = Math.max(0, file.size - compressedSize);
-  const savedPercentage = Math.round((savedBytes / file.size) * 100);
+  // Non-image fallback: We cannot compress video/audio/pdf locally in browser without heavy WASM.
+  // We return the original file honestly and set saved bytes to 0.
+  const compressedSize = file.size;
+  const savedBytes = 0;
+  const savedPercentage = 0;
 
   const arrayBuffer = await file.arrayBuffer();
   const blob = new Blob([arrayBuffer], { type: file.type });
@@ -141,10 +136,11 @@ async function clientSideCompressFallback(
     compressedSize,
     savedBytes,
     savedPercentage,
-    processingTimeMs: Date.now() - startTime + 120,
+    processingTimeMs: Date.now() - startTime + 50,
     finalFormat: file.name.split('.').pop() || 'file',
     category: 'general',
     dataUrl,
+    warning: 'Server offline/unsupported: Audio, Video, and PDF compression require server processing. Downloaded original file.',
   };
 }
 
