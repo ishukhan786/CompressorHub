@@ -411,14 +411,15 @@ app.post('/api/ai-analyze', upload.single('file'), async (req: Request, res: Res
 });
 
 async function startServer() {
-  // Mount Vite middleware in development mode
-  if (process.env.NODE_ENV !== 'production') {
+  // Only mount Vite in local development (not on Vercel)
+  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
+  } else if (!process.env.VERCEL) {
+    // Only serve static files manually if NOT on Vercel
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req: Request, res: Response) => {
@@ -426,9 +427,14 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`CompressHub AI Server running on http://0.0.0.0:${PORT}`);
-  });
+  // Only listen on a port if NOT on Vercel
+  if (!process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`CompressHub AI Server running on http://0.0.0.0:${PORT}`);
+    });
+  }
 }
 
 startServer();
+
+export default app;
