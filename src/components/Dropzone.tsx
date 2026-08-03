@@ -37,9 +37,9 @@ export function Dropzone({ activeCategory, onFilesSelected }: DropzoneProps) {
     const validFiles: File[] = [];
     for (let i = 0; i < fileList.length; i++) {
       const file = fileList[i];
-      // Max 200MB limit check
-      if (file.size > 200 * 1024 * 1024) {
-        setErrorMessage(`"${file.name}" exceeds the 200 MB file limit.`);
+      // Max 1GB limit check
+      if (file.size > 1024 * 1024 * 1024) {
+        setErrorMessage(`"${file.name}" exceeds the 1 GB file limit.`);
         continue;
       }
       validFiles.push(file);
@@ -126,7 +126,7 @@ export function Dropzone({ activeCategory, onFilesSelected }: DropzoneProps) {
             ) : (
               <span className="text-xs text-slate-600 dark:text-indigo-200/70 flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/80 dark:bg-white/5 border border-slate-200 dark:border-white/10 backdrop-blur-md">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-300" />
-                Supports JPG, PNG, WebP, AVIF, PDF, MP4, MOV, MP3, ZIP, DOCX, XLSX, PPTX (Up to 200MB)
+                Supports JPG, PNG, WebP, AVIF, PDF, MP4, MOV, MP3, ZIP, DOCX, XLSX, PPTX (Up to 1GB)
               </span>
             )}
           </div>
