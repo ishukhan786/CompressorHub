@@ -29,6 +29,8 @@ export interface FileItem {
   type: CompressorType;
   mimeType: string;
   previewUrl?: string;
+  videoWidth?: number;
+  videoHeight?: number;
   status: 'idle' | 'uploading' | 'processing' | 'completed' | 'error';
   progress: number;
   originalSize: number;

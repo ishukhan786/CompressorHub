@@ -436,12 +436,28 @@ export function CompressorTool({
         </div>
 
         {/* Video Resolution Selector — only visible when video files are in queue */}
-        {files.some((f) => f.type === 'video') && (
+        {files.some((f) => f.type === 'video') && (() => {
+          const firstVideo = files.find((f) => f.type === 'video');
+          const currentRes = firstVideo?.videoWidth && firstVideo?.videoHeight
+            ? `${firstVideo.videoWidth}×${firstVideo.videoHeight}`
+            : null;
+          const currentResLabel = firstVideo?.videoHeight
+            ? firstVideo.videoHeight >= 2160 ? '4K' : firstVideo.videoHeight >= 1440 ? '2K' : firstVideo.videoHeight >= 1080 ? '1080p' : firstVideo.videoHeight >= 720 ? '720p' : firstVideo.videoHeight >= 480 ? '480p' : '360p'
+            : null;
+
+          return (
           <div className="mt-5 pt-5 border-t border-slate-200/80 dark:border-white/10">
-            <label className="block text-xs font-semibold text-slate-700 dark:text-indigo-100 mb-3 flex items-center gap-2">
-              <Film className="w-3.5 h-3.5 text-purple-500" />
-              Video Output Resolution:
-            </label>
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-xs font-semibold text-slate-700 dark:text-indigo-100 flex items-center gap-2">
+                <Film className="w-3.5 h-3.5 text-purple-500" />
+                Video Output Resolution:
+              </label>
+              {currentRes && (
+                <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-500/10 dark:text-purple-300 dark:border-purple-400/20">
+                  Current: {currentRes} ({currentResLabel})
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
               {[
                 { label: 'Original', value: 'original', badge: 'Keep', badgeColor: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-white/10 dark:text-indigo-200 dark:border-white/20' },
@@ -472,7 +488,8 @@ export function CompressorTool({
               </p>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {/* Checkbox Options */}
         <div className="mt-4 flex items-center gap-6 text-xs text-slate-600 dark:text-indigo-200/80">
@@ -574,8 +591,17 @@ export function CompressorTool({
                       {fileItem.name}
                     </h4>
                     {!isCompleted && (
-                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-indigo-200/70 mt-0.5">
+                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-indigo-200/70 mt-0.5 flex-wrap">
                         <span>Size: {formatSize(fileItem.originalSize)}</span>
+                        {fileItem.type === 'video' && fileItem.videoWidth && fileItem.videoHeight && (
+                          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-500/10 dark:text-purple-300 dark:border-purple-400/20 font-bold text-[10px]">
+                            {fileItem.videoWidth}×{fileItem.videoHeight}
+                            {fileItem.videoHeight >= 2160 ? ' (4K)' : fileItem.videoHeight >= 1440 ? ' (2K)' : fileItem.videoHeight >= 1080 ? ' (1080p)' : fileItem.videoHeight >= 720 ? ' (720p)' : fileItem.videoHeight >= 480 ? ' (480p)' : ' (360p)'}
+                          </span>
+                        )}
+                        {fileItem.type === 'video' && !fileItem.videoWidth && (
+                          <span className="text-[10px] text-slate-400 dark:text-indigo-200/40 italic">detecting resolution...</span>
+                        )}
                       </div>
                     )}
                   </div>

@@ -69,7 +69,7 @@ export default function App() {
       if (type === 'image' || type === 'video') {
         previewUrl = URL.createObjectURL(file);
       }
-      
+
       return {
         id: `file_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         file,
@@ -90,6 +90,27 @@ export default function App() {
     });
 
     setFileQueue((prev) => [...prev, ...newItems]);
+
+    // Detect video dimensions after adding to queue
+    newItems.forEach((item) => {
+      if (item.type === 'video' && item.previewUrl) {
+        const vid = document.createElement('video');
+        vid.preload = 'metadata';
+        vid.onloadedmetadata = () => {
+          const w = vid.videoWidth;
+          const h = vid.videoHeight;
+          URL.revokeObjectURL(vid.src);
+          if (w && h) {
+            setFileQueue((prev) =>
+              prev.map((f) =>
+                f.id === item.id ? { ...f, videoWidth: w, videoHeight: h } : f
+              )
+            );
+          }
+        };
+        vid.src = item.previewUrl;
+      }
+    });
 
     // Scroll to compressor tool queue
     setTimeout(() => {
