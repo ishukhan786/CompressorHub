@@ -41,7 +41,7 @@ export function CompressorTool({
   // Global preset settings
   const [globalPreset, setGlobalPreset] = useState<CompressionPreset>('balanced');
   const [globalQuality, setGlobalQuality] = useState<number>(75);
-  const [customTargetKb, setCustomTargetKb] = useState<string>('');
+  const [customTargetMb, setCustomTargetMb] = useState<string>('');
   const [preserveMetadata, setPreserveMetadata] = useState<boolean>(false);
   const [outputFormat, setOutputFormat] = useState<string>('original');
   const [videoResolution, setVideoResolution] = useState<string>('original');
@@ -73,7 +73,8 @@ export function CompressorTool({
   };
 
   const getSettingsForFile = (fileSize?: number): CompressionSettings => {
-    let targetKb = customTargetKb ? parseFloat(customTargetKb) : undefined;
+    // Convert MB input to KB for backend
+    let targetKb = customTargetMb ? parseFloat(customTargetMb) * 1024 : undefined;
     
     // Enforce the estimated size as a target limit to ensure accuracy with the UI
     if (!targetKb && fileSize) {
@@ -378,7 +379,7 @@ export function CompressorTool({
           {/* Mode Toggle Switch */}
           <div className="flex items-center gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 w-fit mb-5 shadow-inner">
             <button
-              onClick={() => { setCompressionMode('quality'); setCustomTargetKb(''); }}
+              onClick={() => { setCompressionMode('quality'); setCustomTargetMb(''); }}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 ${
                 compressionMode === 'quality'
                   ? 'bg-white dark:bg-indigo-600 text-indigo-700 dark:text-white shadow-md border border-indigo-200 dark:border-indigo-500'
@@ -397,7 +398,7 @@ export function CompressorTool({
               }`}
             >
               <span className={`w-2 h-2 rounded-full ${compressionMode === 'target' ? 'bg-indigo-500 dark:bg-white' : 'bg-slate-300 dark:bg-white/20'}`}></span>
-              Target Size (KB)
+              Target Size (MB)
             </button>
           </div>
 
@@ -443,23 +444,23 @@ export function CompressorTool({
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
-                    placeholder="e.g. 500"
-                    value={customTargetKb}
+                    step="0.1"
+                    min="0.1"
+                    placeholder="e.g. 5"
+                    value={customTargetMb}
                     onChange={(e) => {
-                      setCustomTargetKb(e.target.value);
+                      setCustomTargetMb(e.target.value);
                       setGlobalPreset('custom');
                     }}
                     className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-white/10 text-sm font-bold text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-indigo-200/40 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400"
                   />
                   <span className="px-3 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-400/20 text-xs font-bold text-indigo-700 dark:text-indigo-300">
-                    KB
+                    MB
                   </span>
                 </div>
-                {customTargetKb && (
+                {customTargetMb && (
                   <div className="mt-3 text-center text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 py-2 rounded-xl border border-emerald-100 dark:border-emerald-500/20">
-                    🎯 Target: {parseFloat(customTargetKb) >= 1024
-                      ? `${(parseFloat(customTargetKb) / 1024).toFixed(2)} MB`
-                      : `${customTargetKb} KB`}
+                    🎯 Target: {parseFloat(customTargetMb).toFixed(1)} MB ({Math.round(parseFloat(customTargetMb) * 1024)} KB)
                   </div>
                 )}
                 <p className="mt-2 text-[10px] text-slate-400 dark:text-indigo-200/40">
