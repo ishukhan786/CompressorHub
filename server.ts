@@ -351,6 +351,15 @@ app.post('/api/compress', upload.single('file'), async (req: Request, res: Respo
     // Immediate memory cleanup
     resultBuffer = Buffer.alloc(0);
 
+    let finalMime = mimetype;
+    if (category === 'image') {
+      if (finalFormat === 'jpg' || finalFormat === 'jpeg') finalMime = 'image/jpeg';
+      else if (finalFormat === 'png') finalMime = 'image/png';
+      else if (finalFormat === 'webp') finalMime = 'image/webp';
+      else if (finalFormat === 'avif') finalMime = 'image/avif';
+      else if (finalFormat === 'gif') finalMime = 'image/gif';
+    }
+
     return res.json({
       success: true,
       originalName: originalname,
@@ -361,7 +370,7 @@ app.post('/api/compress', upload.single('file'), async (req: Request, res: Respo
       processingTimeMs,
       finalFormat,
       category,
-      dataUrl: `data:${mimetype};base64,${base64Data}`,
+      dataUrl: `data:${finalMime};base64,${base64Data}`,
     });
   } catch (error: any) {
     console.error('Compression Endpoint Error:', error);
