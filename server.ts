@@ -1,6 +1,7 @@
 /// <reference types="node" />
 /// <reference types="express" />
 /// <reference types="multer" />
+// @ts-ignore
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import os from 'os';
