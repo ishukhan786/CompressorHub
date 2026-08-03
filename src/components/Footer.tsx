@@ -102,7 +102,7 @@ export function Footer({
         <div className="mt-12 pt-6 border-t border-slate-200 dark:border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500 dark:text-indigo-200/60">
           <p>© {new Date().getFullYear()} CompressHub AI. All rights reserved.</p>
           <p className="flex items-center gap-1">
-            Engineered with <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" /> for speed & performance.
+            Made with <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500 animate-pulse" /> by <span className="font-bold text-slate-700 dark:text-indigo-200 tracking-wide">Ishtiaq Uddin Bangash</span>
           </p>
         </div>
       </div>
