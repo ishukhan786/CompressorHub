@@ -12,10 +12,18 @@ export function FeedbackWidget() {
 
     setStatus('submitting');
     try {
-      const res = await fetch('/api/feedback', {
+      const res = await fetch('https://formsubmit.co/ajax/ishukhan.bangash@gmail.com', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          _subject: 'New Feedback for CompressHub AI!',
+          name: formData.name || 'Anonymous',
+          email: formData.email || 'Not provided',
+          message: formData.message
+        }),
       });
       if (res.ok) {
         setStatus('success');
