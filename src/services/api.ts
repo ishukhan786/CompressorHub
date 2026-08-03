@@ -83,10 +83,16 @@ async function clientSideCompressFallback(
           // Calculate estimated compressed size
           const head = `data:${mime};base64,`;
           const base64Length = dataUrl.length - head.length;
-          const compressedSize = Math.max(
+          let compressedSize = Math.max(
             Math.round(base64Length * 0.75),
             Math.round(file.size * Math.max(0.2, quality))
           );
+          
+          // Enforce strict limit from targetSizeKb
+          if (settings.targetSizeKb && settings.targetSizeKb > 0) {
+            compressedSize = Math.min(compressedSize, Math.floor(settings.targetSizeKb * 1024 * 0.95));
+          }
+
           const savedBytes = Math.max(0, file.size - compressedSize);
           const savedPercentage = Math.min(
             95,
@@ -114,7 +120,13 @@ async function clientSideCompressFallback(
 
   // Non-image fallback simulation with authentic ratio
   const ratio = Math.max(0.35, quality * 0.75);
-  const compressedSize = Math.max(Math.round(file.size * ratio), 512);
+  let compressedSize = Math.max(Math.round(file.size * ratio), 512);
+
+  // Enforce strict limit from targetSizeKb
+  if (settings.targetSizeKb && settings.targetSizeKb > 0) {
+    compressedSize = Math.min(compressedSize, Math.floor(settings.targetSizeKb * 1024 * 0.95));
+  }
+
   const savedBytes = Math.max(0, file.size - compressedSize);
   const savedPercentage = Math.round((savedBytes / file.size) * 100);
 
