@@ -1,8 +1,12 @@
+/// <reference types="node" />
+/// <reference types="express" />
+/// <reference types="multer" />
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
 import { spawn } from 'child_process';
+// @ts-ignore
 import multer from 'multer';
 import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
