@@ -156,20 +156,45 @@ export function CompressorTool({
     setIsProcessingAll(false);
   };
 
-  const handleDownloadSingle = (item: FileItem) => {
+  const handleDownloadSingle = async (item: FileItem) => {
     if (!item.compressedUrl) return;
-    const a = document.createElement('a');
-    a.href = item.compressedUrl;
     
-    const origExt = item.name.split('.').pop()?.toLowerCase() || 'file';
-    let ext = item.settings.outputFormat || item.finalFormat || origExt;
-    if (ext === 'jpeg' && origExt === 'jpg') ext = 'jpg';
+    try {
+      // Fetching the base64 data url to convert it into a Blob natively
+      const response = await fetch(item.compressedUrl);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      
+      const origExt = item.name.split('.').pop()?.toLowerCase() || 'file';
+      let ext = item.settings.outputFormat || item.finalFormat || origExt;
+      if (ext === 'jpeg' && origExt === 'jpg') ext = 'jpg';
 
-    const baseName = item.name.substring(0, item.name.lastIndexOf('.')) || item.name;
-    a.download = `${baseName}_compressed.${ext}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+      const baseName = item.name.substring(0, item.name.lastIndexOf('.')) || item.name;
+      a.download = `${baseName}_compressed.${ext}`;
+      
+      document.body.appendChild(a);
+      a.click();
+      
+      // Cleanup
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 150);
+    } catch (err) {
+      console.error('Download error:', err);
+      // Fallback for older browsers
+      const a = document.createElement('a');
+      a.href = item.compressedUrl;
+      const baseName = item.name.substring(0, item.name.lastIndexOf('.')) || item.name;
+      a.download = `${baseName}_compressed.file`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
   };
 
   const handleDownloadAllZip = async () => {
