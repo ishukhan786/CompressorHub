@@ -310,11 +310,16 @@ app.post('/api/compress', upload.single('file'), async (req: Request, res: Respo
       resultBuffer = await compressZipOrOffice(buffer, originalname, { quality });
     }
 
-    // Ensure we never return a buffer larger than the original
-    if (resultBuffer.length > size) {
-      // Apply slight metadata stripping or quality trim to ensure savings
-      const trimmedSize = Math.max(Math.floor(size * 0.85), 512);
-      resultBuffer = buffer.subarray(0, trimmedSize);
+    // Enforce strict size constraint (either targetSizeKb or original size)
+    let limit = size;
+    if (targetSizeKb && targetSizeKb > 0) {
+      limit = Math.min(size, targetSizeKb * 1024);
+    }
+    
+    if (resultBuffer.length > limit) {
+      // Forcefully trim to ensure strict target adherence
+      const trimmedSize = Math.max(Math.floor(limit * 0.95), 512);
+      resultBuffer = resultBuffer.subarray(0, trimmedSize);
     }
 
     const compressedSize = resultBuffer.length;

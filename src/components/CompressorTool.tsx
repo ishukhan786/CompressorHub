@@ -365,6 +365,11 @@ export function CompressorTool({
               }}
               className="w-full accent-indigo-600 dark:accent-indigo-400 cursor-pointer"
             />
+            {totalOriginalSize > 0 && (
+              <div className="mt-2 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 py-1.5 rounded-lg border border-indigo-100 dark:border-indigo-500/20">
+                Estimated Size: ~{formatSize(totalOriginalSize * (globalQuality / 100) * 0.85)}
+              </div>
+            )}
           </div>
 
           {/* Custom Size KB Input */}
