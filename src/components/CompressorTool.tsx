@@ -88,10 +88,26 @@ export function CompressorTool({
   };
 
   const processSingleFile = async (item: FileItem) => {
+    const estimatedSeconds = Math.max(2, Math.min(15, Math.round((item.size / (1024 * 1024)) * 1.5)));
+    
+    let currentProgress = 5;
+    const progressInterval = setInterval(() => {
+      currentProgress += 5;
+      if (currentProgress > 95) currentProgress = 95;
+      onUpdateFile({
+        ...item,
+        status: 'processing',
+        progress: currentProgress,
+        estimatedSeconds,
+        settings: getSettingsForFile(item.size),
+      });
+    }, (estimatedSeconds * 1000) / 18);
+
     const updatedItem: FileItem = {
       ...item,
       status: 'processing',
-      progress: 20,
+      progress: 5,
+      estimatedSeconds,
       settings: getSettingsForFile(item.size),
     };
     onUpdateFile(updatedItem);
@@ -100,6 +116,7 @@ export function CompressorTool({
       const settings = getSettingsForFile(item.size);
       const res = await compressFileApi(item.file, settings);
 
+      clearInterval(progressInterval);
       const completedItem: FileItem = {
         ...item,
         status: 'completed',
@@ -114,6 +131,7 @@ export function CompressorTool({
       };
       onUpdateFile(completedItem);
     } catch (err: any) {
+      clearInterval(progressInterval);
       const errorItem: FileItem = {
         ...item,
         status: 'error',
@@ -556,7 +574,7 @@ export function CompressorTool({
                   {isProcessing && (
                     <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600 dark:text-indigo-300">
                       <div className="w-4 h-4 border-2 border-indigo-500 dark:border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
-                      <span>Processing...</span>
+                      <span>{fileItem.progress}%</span>
                     </div>
                   )}
 
@@ -579,11 +597,19 @@ export function CompressorTool({
 
               {/* Progress bar during processing */}
               {isProcessing && (
-                <div className="mt-3 w-full bg-slate-200 dark:bg-white/10 rounded-full h-1.5 overflow-hidden border border-slate-300 dark:border-white/5">
-                  <div
-                    className="bg-gradient-to-r from-indigo-500 to-purple-500 dark:from-indigo-400 dark:to-purple-400 h-full transition-all duration-300 shadow-sm"
-                    style={{ width: `${fileItem.progress}%` }}
-                  ></div>
+                <div className="mt-3">
+                  <div className="flex justify-between items-center mb-1.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-300 px-1">
+                    <span>Compressing...</span>
+                    <span>{fileItem.estimatedSeconds ? `Est. time: ~${fileItem.estimatedSeconds}s` : 'Please wait'}</span>
+                  </div>
+                  <div className="w-full bg-slate-200 dark:bg-white/10 rounded-full h-1.5 overflow-hidden border border-slate-300 dark:border-white/5 relative">
+                    <div
+                      className="bg-gradient-to-r from-indigo-500 to-purple-500 dark:from-indigo-400 dark:to-purple-400 h-full transition-all duration-300 shadow-sm relative overflow-hidden"
+                      style={{ width: `${fileItem.progress}%` }}
+                    >
+                      <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+                    </div>
+                  </div>
                 </div>
               )}
 
