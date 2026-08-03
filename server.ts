@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
@@ -9,22 +9,54 @@ import { PDFDocument } from 'pdf-lib';
 import AdmZip from 'adm-zip';
 import { createServer as createViteServer } from 'vite';
 
-const app = express();
-const PORT = 3000;
+// --- Types & Interfaces ---
+interface CompressionSettings {
+  quality?: number;
+  preserveMetadata?: boolean;
+  outputFormat?: string;
+  targetSizeKb?: number;
+  videoResolution?: string;
+}
 
-// Setup Multer memory storage (Max 1GB per file, stored in memory)
+interface CompressedResult {
+  buffer: Buffer;
+  format: string;
+}
+
+interface AIAnalysisResponse {
+  recommendedQuality: number;
+  suggestedFormat: string;
+  advice: string;
+}
+
+// --- Configuration ---
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB
+
+const RESOLUTION_HEIGHTS: Record<string, number | null> = {
+  '4k': 2160,
+  '2k': 1440,
+  '1080p': 1080,
+  '720p': 720,
+  '480p': 480,
+  '360p': 360,
+  original: null,
+};
+
+// --- App Setup ---
+const app = express();
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 1024 * 1024 * 1024, // 1GB
-  },
+  limits: { fileSize: MAX_FILE_SIZE },
 });
 
 app.use(express.json());
 
-// Helper to determine file category
+// --- Utilities ---
 function getFileCategory(filename: string, mimeType: string): string {
   const ext = path.extname(filename).toLowerCase();
+  
   if (['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif', '.tiff', '.bmp'].includes(ext) || mimeType.startsWith('image/')) {
     return 'image';
   }
@@ -52,145 +84,143 @@ function getFileCategory(filename: string, mimeType: string): string {
   return 'general';
 }
 
-// ---------------------------------------------------------------------------
-// Image compression engine using Sharp
-// ---------------------------------------------------------------------------
-async function compressImage(
-  buffer: Buffer,
-  filename: string,
-  settings: {
-    quality?: number;
-    preserveMetadata?: boolean;
-    outputFormat?: string;
-    targetSizeKb?: number;
+function parseSettings(rawSettings: unknown): CompressionSettings {
+  if (typeof rawSettings === 'string' && rawSettings.trim() !== '') {
+    try {
+      return JSON.parse(rawSettings) as CompressionSettings;
+    } catch {
+      return {};
+    }
   }
-): Promise<{ buffer: Buffer; format: string }> {
-  const quality = Math.max(10, Math.min(100, settings.quality ?? 75));
-  const ext = path.extname(filename).toLowerCase().replace('.', '');
-  let format = settings.outputFormat || (ext === 'jpg' ? 'jpeg' : ext);
-  if (!['jpeg', 'png', 'webp', 'avif', 'gif'].includes(format)) {
-    format = 'jpeg';
+  if (typeof rawSettings === 'object' && rawSettings !== null) {
+    return rawSettings as CompressionSettings;
   }
+  return {};
+}
 
+// --- Engines ---
+async function processImagePipeline(buffer: Buffer, format: string, quality: number, preserveMetadata: boolean, scale: number = 1.0): Promise<Buffer> {
   let pipeline = sharp(buffer, { failOn: 'none' });
 
-  if (settings.preserveMetadata) {
+  if (preserveMetadata) {
     pipeline = pipeline.withMetadata();
   }
 
-  if (format === 'jpeg' || format === 'jpg') {
-    pipeline = pipeline.jpeg({ quality, mozjpeg: true });
-  } else if (format === 'png') {
-    const compressionLevel = Math.floor((100 - quality) / 10); // 0-9
-    pipeline = pipeline.png({ compressionLevel: Math.min(9, Math.max(1, compressionLevel)), palette: quality < 80 });
-  } else if (format === 'webp') {
-    pipeline = pipeline.webp({ quality, effort: 6 });
-  } else if (format === 'avif') {
-    pipeline = pipeline.avif({ quality, effort: 4 });
-  } else if (format === 'gif') {
-    pipeline = pipeline.gif({});
-  }
-
-  let outputBuffer = await pipeline.toBuffer();
-
-  // If a target size is requested and we're still above it, iteratively
-  // reduce quality then dimensions — always via the real encoder, never
-  // by slicing bytes.
-  if (settings.targetSizeKb && settings.targetSizeKb > 0) {
-    const targetBytes = settings.targetSizeKb * 1024;
-    let currentQuality = quality;
-    let currentScale = 1.0;
+  if (scale < 1.0) {
     const metadata = await sharp(buffer).metadata();
-
-    while (outputBuffer.length > targetBytes && (currentQuality > 5 || currentScale > 0.1)) {
-      if (currentQuality > 10) {
-        currentQuality = Math.max(5, currentQuality - 15);
-      } else {
-        currentScale = Math.max(0.1, currentScale - 0.2);
-      }
-
-      let iterative = sharp(buffer, { failOn: 'none' });
-      if (settings.preserveMetadata) iterative = iterative.withMetadata();
-
-      if (currentScale < 1.0 && metadata.width) {
-        iterative = iterative.resize(Math.max(1, Math.round(metadata.width * currentScale)));
-      }
-
-      if (format === 'jpeg' || format === 'jpg') {
-        iterative = iterative.jpeg({ quality: currentQuality, mozjpeg: true });
-      } else if (format === 'webp') {
-        iterative = iterative.webp({ quality: currentQuality });
-      } else if (format === 'png') {
-        iterative = iterative.png({ palette: true, colors: Math.max(16, currentQuality * 2) });
-      } else if (format === 'avif') {
-        iterative = iterative.avif({ quality: currentQuality });
-      } else {
-        iterative = iterative.toFormat(format as any);
-      }
-
-      outputBuffer = await iterative.toBuffer();
+    if (metadata.width) {
+      pipeline = pipeline.resize(Math.max(1, Math.round(metadata.width * scale)));
     }
   }
 
-  return { buffer: outputBuffer, format };
+  switch (format) {
+    case 'jpeg':
+    case 'jpg':
+      pipeline = pipeline.jpeg({ quality, mozjpeg: true, progressive: true, chromaSubsampling: '4:4:4' });
+      break;
+    case 'png':
+      const colors = Math.max(16, quality * 2.5);
+      pipeline = pipeline.png({ palette: true, compressionLevel: 9, colors: Math.min(256, Math.floor(colors)) });
+      break;
+    case 'webp':
+      pipeline = pipeline.webp({ quality, effort: 6, smartSubsample: true });
+      break;
+    case 'avif':
+      pipeline = pipeline.avif({ quality, effort: 6, chromaSubsampling: '4:4:4' });
+      break;
+    case 'gif':
+      pipeline = pipeline.gif({});
+      break;
+    default:
+      pipeline = pipeline.toFormat(format as any);
+  }
+
+  return pipeline.toBuffer();
 }
 
-// ---------------------------------------------------------------------------
-// PDF compression engine using pdf-lib
-//
-// IMPORTANT: never slice raw PDF bytes to "hit a target size" — PDFs are a
-// structured binary format (xref table, object streams, trailer). Cutting
-// bytes off the end produces a file that will not open. If pdf-lib's real
-// re-save doesn't shrink the file enough, we just return the best legitimate
-// result and report the true saved percentage (which may be 0).
-// ---------------------------------------------------------------------------
-async function compressPdf(
-  buffer: Buffer,
-  settings: { quality?: number; preserveMetadata?: boolean }
-): Promise<Buffer> {
+async function compressImage(buffer: Buffer, filename: string, settings: CompressionSettings): Promise<CompressedResult> {
+  const ext = path.extname(filename).toLowerCase().replace('.', '');
+  let format = settings.outputFormat || (ext === 'jpg' ? 'jpeg' : ext);
+  
+  if (!['jpeg', 'png', 'webp', 'avif', 'gif'].includes(format)) {
+    format = 'jpeg';
+  }
+  
+  const targetQuality = Math.max(10, Math.min(100, settings.quality ?? 75));
+  const preserve = Boolean(settings.preserveMetadata);
+  
+  if (!settings.targetSizeKb || settings.targetSizeKb <= 0) {
+    const outBuffer = await processImagePipeline(buffer, format, targetQuality, preserve);
+    return { buffer: outBuffer, format };
+  }
+
+  const targetBytes = settings.targetSizeKb * 1024;
+  
+  let lowQ = 10;
+  let highQ = targetQuality;
+  let bestBuffer = await processImagePipeline(buffer, format, targetQuality, preserve);
+  
+  if (bestBuffer.length <= targetBytes) {
+    return { buffer: bestBuffer, format };
+  }
+
+  let iterations = 0;
+  while (lowQ <= highQ && iterations < 7) {
+    const midQ = Math.floor((lowQ + highQ) / 2);
+    const tempBuffer = await processImagePipeline(buffer, format, midQ, preserve);
+    
+    if (tempBuffer.length === targetBytes) {
+      bestBuffer = tempBuffer;
+      break;
+    }
+    
+    if (tempBuffer.length > targetBytes) {
+      highQ = midQ - 1;
+    } else {
+      bestBuffer = tempBuffer; 
+      lowQ = midQ + 1;
+    }
+    iterations++;
+  }
+
+  let scale = 1.0;
+  const finalQuality = lowQ < 10 ? 10 : lowQ;
+  
+  while (bestBuffer.length > targetBytes && scale > 0.1) {
+    scale -= 0.15;
+    bestBuffer = await processImagePipeline(buffer, format, finalQuality, preserve, scale);
+  }
+
+  return { buffer: bestBuffer, format };
+}
+
+async function compressPdf(buffer: Buffer, settings: CompressionSettings): Promise<Buffer> {
   try {
     const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
 
     if (!settings.preserveMetadata) {
       pdfDoc.setAuthor('');
-      pdfDoc.setProducer('CompressHub AI Engine');
-      pdfDoc.setCreator('CompressHub AI Engine');
+      pdfDoc.setProducer('CompressHub Engine');
+      pdfDoc.setCreator('CompressHub');
       pdfDoc.setSubject('');
       pdfDoc.setKeywords([]);
     }
 
-    // Re-saving with object streams enabled is a real (if modest) win —
-    // it de-duplicates and compresses the internal object table. It will
-    // never corrupt the file, unlike byte-slicing.
-    const pdfBytes = await pdfDoc.save({
-      useObjectStreams: true,
-      addDefaultPage: false,
-    });
-
+    const pdfBytes = await pdfDoc.save({ useObjectStreams: true, addDefaultPage: false });
     const compressedBuffer = Buffer.from(pdfBytes);
 
-    // Only use the re-saved version if it's actually smaller or equal —
-    // otherwise keep the original untouched. No fallback byte-slicing.
-    return compressedBuffer.length <= buffer.length ? compressedBuffer : buffer;
+    return compressedBuffer.length < buffer.length ? compressedBuffer : buffer;
   } catch (err) {
-    console.error('PDF compression error, returning original file untouched:', err);
+    console.warn('PDF compression warning:', err instanceof Error ? err.message : String(err));
     return buffer;
   }
 }
 
-// ---------------------------------------------------------------------------
-// Office Document (Word, Excel, PowerPoint) & ZIP compression engine
-// ---------------------------------------------------------------------------
-async function compressZipOrOffice(
-  buffer: Buffer,
-  filename: string,
-  settings: { quality?: number }
-): Promise<Buffer> {
+async function compressZipOrOffice(buffer: Buffer, filename: string, settings: CompressionSettings): Promise<Buffer> {
   try {
     const zip = new AdmZip(buffer);
     const newZip = new AdmZip();
-    const quality = settings.quality || 75;
-
+    
     const entries = zip.getEntries();
     for (const entry of entries) {
       if (entry.isDirectory) {
@@ -203,47 +233,31 @@ async function compressZipOrOffice(
 
       if (['.jpg', '.jpeg', '.png'].some((ext) => entryName.endsWith(ext))) {
         try {
-          const { buffer: compressedImg } = await compressImage(entryBuffer, entryName, {
-            quality,
-            preserveMetadata: false,
-          });
-          if (compressedImg.length < entryBuffer.length) {
-            entryBuffer = compressedImg;
+          const imgRes = await compressImage(entryBuffer, entryName, { quality: settings.quality, preserveMetadata: false });
+          if (imgRes.buffer.length < entryBuffer.length) {
+            entryBuffer = imgRes.buffer;
           }
         } catch {
-          // Keep original image entry if conversion fails
+           // Proceed with uncompressed
         }
       }
-
       newZip.addFile(entry.entryName, entryBuffer, entry.comment);
     }
 
     const outputBuffer = newZip.toBuffer();
     return outputBuffer.length < buffer.length ? outputBuffer : buffer;
   } catch (err) {
-    console.error('ZIP/Office compression error, returning original file untouched:', err);
+    console.warn('ZIP compression warning:', err instanceof Error ? err.message : String(err));
     return buffer;
   }
 }
 
-// ---------------------------------------------------------------------------
-// Media (Video / Audio) compression via ffmpeg
-//
-// IMPORTANT: the previous implementation sliced raw bytes off video/audio
-// files, which does NOT compress media — it produces a truncated, unplayable
-// file. Real compression requires re-encoding with a codec. This version
-// shells out to ffmpeg (must be installed on the host / container image).
-// If ffmpeg is not available, it returns the original file untouched rather
-// than producing a corrupt one.
-// ---------------------------------------------------------------------------
 function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
-    proc.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-    proc.on('error', (err) => reject(err)); // e.g. ffmpeg not installed
+    proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+    proc.on('error', (err) => reject(err));
     proc.on('close', (code) => {
       if (code === 0) resolve();
       else reject(new Error(`ffmpeg exited with code ${code}: ${stderr.slice(-500)}`));
@@ -251,22 +265,7 @@ function runFfmpeg(args: string[]): Promise<void> {
   });
 }
 
-const RESOLUTION_HEIGHTS: Record<string, number | null> = {
-  '4k': 2160,
-  '2k': 1440,
-  '1080p': 1080,
-  '720p': 720,
-  '480p': 480,
-  '360p': 360,
-  original: null,
-};
-
-async function compressMedia(
-  buffer: Buffer,
-  filename: string,
-  category: 'video' | 'audio',
-  settings: { quality?: number; targetSizeKb?: number; videoResolution?: string }
-): Promise<{ buffer: Buffer; ext: string }> {
+async function compressMedia(buffer: Buffer, filename: string, category: 'video' | 'audio', settings: CompressionSettings): Promise<CompressedResult> {
   const quality = settings.quality ?? 75;
   const origExt = path.extname(filename) || (category === 'video' ? '.mp4' : '.mp3');
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'compresshub-'));
@@ -276,11 +275,9 @@ async function compressMedia(
 
   try {
     await fs.writeFile(inPath, buffer);
-
     const args = ['-y', '-i', inPath];
 
     if (category === 'video') {
-      // Quality 0-100 -> CRF ~18 (best) to ~35 (smallest). Lower CRF = higher quality.
       const crf = Math.round(35 - (quality / 100) * 17);
       args.push('-c:v', 'libx264', '-crf', String(crf), '-preset', 'medium');
 
@@ -289,96 +286,72 @@ async function compressMedia(
         args.push('-vf', `scale=-2:'min(${targetHeight},ih)'`);
       }
 
-      // If an explicit target size is given, use two-pass-style bitrate targeting instead of CRF.
       if (settings.targetSizeKb && settings.targetSizeKb > 0) {
-        // Rough duration probe isn't done here to keep this dependency-light;
-        // fall back to a conservative average bitrate cap instead of CRF.
-        const targetBitrateKbps = Math.max(150, Math.floor((settings.targetSizeKb * 8) / 60)); // assumes ~60s if unknown
-        args.splice(args.indexOf('-crf'), 2); // remove crf flag pair
+        const targetBitrateKbps = Math.max(150, Math.floor((settings.targetSizeKb * 8) / 60)); 
+        const crfIndex = args.indexOf('-crf');
+        if (crfIndex !== -1) {
+          args.splice(crfIndex, 2);
+        }
         args.push('-b:v', `${targetBitrateKbps}k`, '-maxrate', `${targetBitrateKbps}k`, '-bufsize', `${targetBitrateKbps * 2}k`);
       }
-
       args.push('-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart');
     } else {
-      // Audio: map quality to bitrate
-      const bitrateKbps = Math.round(64 + (quality / 100) * 192); // 64k - 256k
+      const bitrateKbps = Math.round(64 + (quality / 100) * 192); 
       args.push('-c:a', 'aac', '-b:a', `${bitrateKbps}k`);
     }
 
     args.push(outPath);
-
     await runFfmpeg(args);
+    
     const resultBuffer = await fs.readFile(outPath);
-    return { buffer: resultBuffer, ext: outExt };
+    return { buffer: resultBuffer, format: outExt.replace('.', '') };
   } catch (err) {
-    console.error('Media compression unavailable (ffmpeg missing or failed), returning original file untouched:', err);
-    return { buffer, ext: origExt };
+    console.warn('Media compression warning (ffmpeg might be missing):', err instanceof Error ? err.message : String(err));
+    return { buffer, format: origExt.replace('.', '') };
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
-// ---------------------------------------------------------------------------
-// Health check endpoint
-// ---------------------------------------------------------------------------
+// --- Routes ---
 app.get('/api/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', service: 'CompressHub AI Engine', time: new Date().toISOString() });
+  res.json({ status: 'ok', service: 'CompressHub Engine', time: new Date().toISOString() });
 });
 
-// ---------------------------------------------------------------------------
-// Main Compression API Endpoint
-// ---------------------------------------------------------------------------
-app.post('/api/compress', upload.single('file'), async (req: Request, res: Response) => {
+app.post('/api/compress', upload.single('file'), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   const startTime = Date.now();
+  
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
     }
 
     const { buffer, originalname, mimetype, size } = req.file;
-    const settingsRaw = req.body.settings ? JSON.parse(req.body.settings) : {};
-    const quality = Number(settingsRaw.quality || 75);
-    const preserveMetadata = Boolean(settingsRaw.preserveMetadata);
-    const outputFormat = settingsRaw.outputFormat || '';
-    const targetSizeKb = Number(settingsRaw.targetSizeKb || 0);
-    const videoResolution = settingsRaw.videoResolution || 'original';
-
+    const settings = parseSettings(req.body.settings);
     const category = getFileCategory(originalname, mimetype);
+
     let resultBuffer: Buffer = buffer;
     let finalFormat = path.extname(originalname).toLowerCase().replace('.', '');
 
     if (category === 'image') {
-      const imgRes = await compressImage(buffer, originalname, {
-        quality,
-        preserveMetadata,
-        outputFormat,
-        targetSizeKb,
-      });
+      const imgRes = await compressImage(buffer, originalname, settings);
       resultBuffer = imgRes.buffer;
       finalFormat = imgRes.format;
     } else if (category === 'pdf') {
-      resultBuffer = await compressPdf(buffer, { quality, preserveMetadata });
+      resultBuffer = await compressPdf(buffer, settings);
     } else if (['word', 'excel', 'powerpoint', 'zip'].includes(category)) {
-      resultBuffer = await compressZipOrOffice(buffer, originalname, { quality });
+      resultBuffer = await compressZipOrOffice(buffer, originalname, settings);
     } else if (category === 'video' || category === 'audio') {
-      const mediaRes = await compressMedia(buffer, originalname, category, {
-        quality,
-        targetSizeKb,
-        videoResolution,
-      });
+      const mediaRes = await compressMedia(buffer, originalname, category, settings);
       resultBuffer = mediaRes.buffer;
-      finalFormat = mediaRes.ext.replace('.', '');
-    } else {
-      resultBuffer = await compressZipOrOffice(buffer, originalname, { quality });
+      finalFormat = mediaRes.format;
     }
 
     const compressedSize = resultBuffer.length;
-    // Honest saving calculation: never floor to a fake minimum of 1%.
-    // If the file didn't actually shrink, report 0%.
     const savedBytes = Math.max(0, size - compressedSize);
     const savedPercentage = savedBytes > 0 ? Math.min(99, Math.round((savedBytes / size) * 100)) : 0;
     const processingTimeMs = Date.now() - startTime;
-
     const base64Data = resultBuffer.toString('base64');
 
     let finalMime = mimetype;
@@ -394,7 +367,7 @@ app.post('/api/compress', upload.single('file'), async (req: Request, res: Respo
       finalMime = finalFormat === 'm4a' ? 'audio/mp4' : mimetype;
     }
 
-    return res.json({
+    res.json({
       success: true,
       originalName: originalname,
       originalSize: size,
@@ -406,27 +379,27 @@ app.post('/api/compress', upload.single('file'), async (req: Request, res: Respo
       category,
       dataUrl: `data:${finalMime};base64,${base64Data}`,
     });
-  } catch (error: any) {
-    console.error('Compression Endpoint Error:', error);
-    return res.status(500).json({
-      error: 'Failed to compress file',
-      details: error?.message || 'Internal processing error',
-    });
+  } catch (error) {
+    console.error('Compression Endpoint Error:', error instanceof Error ? error.message : String(error));
+    res.status(500).json({ error: 'Failed to compress file', details: 'Internal processing error' });
   }
 });
 
-// ---------------------------------------------------------------------------
-// AI analysis endpoint for smart settings recommendation (via OpenRouter)
-// ---------------------------------------------------------------------------
-app.post('/api/ai-analyze', upload.single('file'), async (req: Request, res: Response) => {
+app.post('/api/ai-analyze', upload.single('file'), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const defaultFallback: AIAnalysisResponse = {
+    recommendedQuality: 75,
+    suggestedFormat: 'webp',
+    advice: 'Balanced smart compression level active.',
+  };
+
   try {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      return res.json({
-        recommendedQuality: 75,
-        suggestedFormat: 'webp',
-        advice: 'Smart optimization configured for balanced visual quality and 60-80% file size reduction.',
+      res.json({
+        ...defaultFallback,
+        advice: 'Smart optimization configured for balanced visual quality and file size reduction.',
       });
+      return;
     }
 
     const filename = req.file?.originalname || 'document';
@@ -439,42 +412,38 @@ app.post('/api/ai-analyze', upload.single('file'), async (req: Request, res: Res
         "advice": string (short 1-2 sentence tip on preserving clarity while saving space)
       }`;
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [{ role: 'user', content: prompt }],
-      }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model: 'google/gemini-2.5-flash', messages: [{ role: 'user', content: prompt }] }),
+      signal: controller.signal,
     });
+    
+    clearTimeout(timeout);
 
     if (!response.ok) {
-      throw new Error(`OpenRouter API error: ${response.statusText}`);
+      throw new Error(`API error: ${response.statusText}`);
     }
 
     const data = await response.json();
     const text = data.choices?.[0]?.message?.content || '';
     const jsonMatch = text.match(/\{[\s\S]*\}/);
+    
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return res.json(parsed);
+      const parsed = JSON.parse(jsonMatch[0]) as AIAnalysisResponse;
+      if (parsed.recommendedQuality && parsed.suggestedFormat && parsed.advice) {
+        res.json(parsed);
+        return;
+      }
     }
 
-    return res.json({
-      recommendedQuality: 75,
-      suggestedFormat: 'webp',
-      advice: 'AI recommends converting images to WebP format for optimal multi-platform speed.',
-    });
+    res.json(defaultFallback);
   } catch (err) {
-    console.error('AI Analysis Error:', err);
-    return res.json({
-      recommendedQuality: 75,
-      suggestedFormat: 'webp',
-      advice: 'Balanced smart compression level active.',
-    });
+    console.warn('AI Analysis Error:', err instanceof Error ? err.message : String(err));
+    res.json(defaultFallback);
   }
 });
 
