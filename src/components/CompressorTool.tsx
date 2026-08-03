@@ -193,11 +193,15 @@ export function CompressorTool({
       }, 150);
     } catch (err) {
       console.error('Download error:', err);
-      // Absolute fallback
+      // Absolute fallback (preserves correct file extension)
+      const origExt = item.name.split('.').pop()?.toLowerCase() || 'file';
+      let ext = item.settings.outputFormat || item.finalFormat || origExt;
+      if (ext === 'jpeg' && origExt === 'jpg') ext = 'jpg';
+
       const a = document.createElement('a');
       a.href = item.compressedUrl;
       const baseName = item.name.substring(0, item.name.lastIndexOf('.')) || item.name;
-      a.download = `${baseName}_compressed.file`;
+      a.download = `${baseName}_compressed.${ext}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
