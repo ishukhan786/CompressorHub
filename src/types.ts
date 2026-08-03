@@ -18,6 +18,7 @@ export interface CompressionSettings {
   preserveMetadata: boolean;
   outputFormat?: string; // Optional format conversion e.g. 'webp', 'avif', 'jpg', 'png'
   resizeMaxDimension?: number; // Optional max width/height in px
+  videoResolution?: string; // e.g. '4k', '2k', '1080p', '720p', '480p', '360p'
 }
 
 export interface FileItem {

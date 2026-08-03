@@ -44,6 +44,7 @@ export function CompressorTool({
   const [customTargetKb, setCustomTargetKb] = useState<string>('');
   const [preserveMetadata, setPreserveMetadata] = useState<boolean>(false);
   const [outputFormat, setOutputFormat] = useState<string>('original');
+  const [videoResolution, setVideoResolution] = useState<string>('original');
   const [isProcessingAll, setIsProcessingAll] = useState<boolean>(false);
 
   // Active modal comparison file
@@ -84,6 +85,7 @@ export function CompressorTool({
       targetSizeKb: targetKb,
       preserveMetadata,
       outputFormat: outputFormat !== 'original' ? outputFormat : undefined,
+      videoResolution: videoResolution !== 'original' ? videoResolution : undefined,
     };
   };
 
@@ -432,6 +434,45 @@ export function CompressorTool({
             </select>
           </div>
         </div>
+
+        {/* Video Resolution Selector — only visible when video files are in queue */}
+        {files.some((f) => f.type === 'video') && (
+          <div className="mt-5 pt-5 border-t border-slate-200/80 dark:border-white/10">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-indigo-100 mb-3 flex items-center gap-2">
+              <Film className="w-3.5 h-3.5 text-purple-500" />
+              Video Output Resolution:
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+              {[
+                { label: 'Original', value: 'original', badge: 'Keep', badgeColor: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-white/10 dark:text-indigo-200 dark:border-white/20' },
+                { label: '4K', value: '4k', badge: '3840×2160', badgeColor: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-400/20' },
+                { label: '2K', value: '2k', badge: '2560×1440', badgeColor: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-500/10 dark:text-purple-300 dark:border-purple-400/20' },
+                { label: '1080p', value: '1080p', badge: 'FHD', badgeColor: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-400/20' },
+                { label: '720p', value: '720p', badge: 'HD', badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-400/20' },
+                { label: '480p', value: '480p', badge: 'SD', badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-400/20' },
+                { label: '360p', value: '360p', badge: 'Low', badgeColor: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-400/20' },
+              ].map((res) => (
+                <button
+                  key={res.value}
+                  onClick={() => setVideoResolution(res.value)}
+                  className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border text-center transition-all ${
+                    videoResolution === res.value
+                      ? 'border-indigo-500 bg-indigo-50/90 dark:border-indigo-400/60 dark:bg-indigo-500/20 ring-2 ring-indigo-400/40 shadow-sm'
+                      : 'border-slate-200 bg-white/80 hover:border-indigo-300 dark:border-white/10 dark:bg-white/5 dark:hover:border-indigo-400/50'
+                  }`}
+                >
+                  <span className="text-sm font-extrabold text-slate-900 dark:text-white">{res.label}</span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${res.badgeColor}`}>{res.badge}</span>
+                </button>
+              ))}
+            </div>
+            {videoResolution !== 'original' && (
+              <p className="mt-2 text-[10px] text-slate-500 dark:text-indigo-200/50">
+                ⚡ Video will be scaled down to {videoResolution} resolution. Upscaling is not applied if source is already lower.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Checkbox Options */}
         <div className="mt-4 flex items-center gap-6 text-xs text-slate-600 dark:text-indigo-200/80">

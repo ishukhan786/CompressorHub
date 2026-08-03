@@ -226,13 +226,23 @@ async function compressZipOrOffice(
 async function compressMedia(
   buffer: Buffer,
   filename: string,
-  settings: { quality?: number; targetSizeKb?: number }
+  settings: { quality?: number; targetSizeKb?: number; videoResolution?: string }
 ): Promise<Buffer> {
   const quality = settings.quality || 75;
   const originalSize = buffer.length;
 
-  // Calculate target compression ratio based on user quality preset
-  // Extreme: 0.3-0.4x size, Balanced: 0.5-0.65x size, Low: 0.7-0.85x size
+  // Resolution-based reduction factors (approximate pixel area ratios vs 4K)
+  const resolutionFactors: Record<string, number> = {
+    '4k':    1.00,   // 3840×2160 — keep full
+    '2k':    0.56,   // 2560×1440 — ~56% of 4K area
+    '1080p': 0.25,   // 1920×1080 — ~25% of 4K area
+    '720p':  0.11,   // 1280×720  — ~11% of 4K area
+    '480p':  0.05,   // 854×480   — ~5% of 4K area
+    '360p':  0.028,  // 640×360   — ~2.8% of 4K area
+    'original': 1.0,
+  };
+
+  // Calculate target compression ratio based on quality preset
   let reductionFactor = 0.65;
   if (quality <= 40) {
     reductionFactor = 0.35;
@@ -240,6 +250,13 @@ async function compressMedia(
     reductionFactor = 0.55;
   } else {
     reductionFactor = 0.78;
+  }
+
+  // Apply resolution downscale factor on top of quality factor
+  const res = settings.videoResolution || 'original';
+  if (res !== 'original' && resolutionFactors[res]) {
+    // Blend quality factor with resolution factor  
+    reductionFactor = Math.min(reductionFactor, resolutionFactors[res] * 1.2);
   }
 
   if (settings.targetSizeKb && settings.targetSizeKb > 0) {
@@ -285,6 +302,7 @@ app.post('/api/compress', upload.single('file'), async (req: Request, res: Respo
     const preserveMetadata = Boolean(settingsRaw.preserveMetadata);
     const outputFormat = settingsRaw.outputFormat || '';
     const targetSizeKb = Number(settingsRaw.targetSizeKb || 0);
+    const videoResolution = settingsRaw.videoResolution || 'original';
 
     const category = getFileCategory(originalname, mimetype);
     let resultBuffer: Buffer = buffer;
@@ -304,7 +322,7 @@ app.post('/api/compress', upload.single('file'), async (req: Request, res: Respo
     } else if (['word', 'excel', 'powerpoint', 'zip'].includes(category)) {
       resultBuffer = await compressZipOrOffice(buffer, originalname, { quality });
     } else if (['video', 'audio'].includes(category)) {
-      resultBuffer = await compressMedia(buffer, originalname, { quality, targetSizeKb });
+      resultBuffer = await compressMedia(buffer, originalname, { quality, targetSizeKb, videoResolution });
     } else {
       // General file compression
       resultBuffer = await compressZipOrOffice(buffer, originalname, { quality });
