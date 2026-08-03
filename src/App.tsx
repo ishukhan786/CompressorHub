@@ -45,7 +45,7 @@ function getCategoryFromMimeOrExt(filename: string, mimeType: string): Compresso
 }
 
 export default function App() {
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
   const [activeCategory, setActiveCategory] = useState<CompressorType | 'all'>('all');
   const [fileQueue, setFileQueue] = useState<FileItem[]>([]);
   const [sitemapOpen, setSitemapOpen] = useState<boolean>(false);
