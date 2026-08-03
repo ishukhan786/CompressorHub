@@ -1,16 +1,18 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
+import os from 'os';
+import fs from 'fs/promises';
+import { spawn } from 'child_process';
 import multer from 'multer';
 import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 import AdmZip from 'adm-zip';
 import { createServer as createViteServer } from 'vite';
 
-
 const app = express();
 const PORT = 3000;
 
-// Setup Multer memory storage (Max 200MB per file, stored in memory)
+// Setup Multer memory storage (Max 1GB per file, stored in memory)
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -50,7 +52,9 @@ function getFileCategory(filename: string, mimeType: string): string {
   return 'general';
 }
 
+// ---------------------------------------------------------------------------
 // Image compression engine using Sharp
+// ---------------------------------------------------------------------------
 async function compressImage(
   buffer: Buffer,
   filename: string,
@@ -70,16 +74,13 @@ async function compressImage(
 
   let pipeline = sharp(buffer, { failOn: 'none' });
 
-  // Handle EXIF metadata
   if (settings.preserveMetadata) {
     pipeline = pipeline.withMetadata();
   }
 
-  // Format specific encoding
   if (format === 'jpeg' || format === 'jpg') {
     pipeline = pipeline.jpeg({ quality, mozjpeg: true });
   } else if (format === 'png') {
-    // Sharp PNG compression quality level
     const compressionLevel = Math.floor((100 - quality) / 10); // 0-9
     pipeline = pipeline.png({ compressionLevel: Math.min(9, Math.max(1, compressionLevel)), palette: quality < 80 });
   } else if (format === 'webp') {
@@ -92,28 +93,27 @@ async function compressImage(
 
   let outputBuffer = await pipeline.toBuffer();
 
-  // If custom target size is requested in KB and output exceeds target, run iterative downscale
+  // If a target size is requested and we're still above it, iteratively
+  // reduce quality then dimensions — always via the real encoder, never
+  // by slicing bytes.
   if (settings.targetSizeKb && settings.targetSizeKb > 0) {
     const targetBytes = settings.targetSizeKb * 1024;
     let currentQuality = quality;
     let currentScale = 1.0;
+    const metadata = await sharp(buffer).metadata();
 
-    // Aggressive loop to hit target size safely without corrupting the file
     while (outputBuffer.length > targetBytes && (currentQuality > 5 || currentScale > 0.1)) {
       if (currentQuality > 10) {
         currentQuality = Math.max(5, currentQuality - 15);
       } else {
         currentScale = Math.max(0.1, currentScale - 0.2);
       }
-      
+
       let iterative = sharp(buffer, { failOn: 'none' });
       if (settings.preserveMetadata) iterative = iterative.withMetadata();
 
-      if (currentScale < 1.0) {
-        const metadata = await sharp(buffer).metadata();
-        if (metadata.width && metadata.height) {
-          iterative = iterative.resize(Math.round(metadata.width * currentScale));
-        }
+      if (currentScale < 1.0 && metadata.width) {
+        iterative = iterative.resize(Math.max(1, Math.round(metadata.width * currentScale)));
       }
 
       if (format === 'jpeg' || format === 'jpg') {
@@ -121,12 +121,11 @@ async function compressImage(
       } else if (format === 'webp') {
         iterative = iterative.webp({ quality: currentQuality });
       } else if (format === 'png') {
-        // PNG doesn't respond well to quality drops, relies heavily on scaling
         iterative = iterative.png({ palette: true, colors: Math.max(16, currentQuality * 2) });
       } else if (format === 'avif') {
         iterative = iterative.avif({ quality: currentQuality });
       } else {
-        iterative = iterative.toFormat(format as any);
+        iterative = iterative.toFormat(format as keyof sharp.FormatEnum);
       }
 
       outputBuffer = await iterative.toBuffer();
@@ -136,47 +135,52 @@ async function compressImage(
   return { buffer: outputBuffer, format };
 }
 
+// ---------------------------------------------------------------------------
 // PDF compression engine using pdf-lib
+//
+// IMPORTANT: never slice raw PDF bytes to "hit a target size" — PDFs are a
+// structured binary format (xref table, object streams, trailer). Cutting
+// bytes off the end produces a file that will not open. If pdf-lib's real
+// re-save doesn't shrink the file enough, we just return the best legitimate
+// result and report the true saved percentage (which may be 0).
+// ---------------------------------------------------------------------------
 async function compressPdf(
   buffer: Buffer,
-  settings: { quality?: number }
+  settings: { quality?: number; preserveMetadata?: boolean }
 ): Promise<Buffer> {
   try {
     const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
-    
-    // Purge unwanted metadata keywords
-    pdfDoc.setTitle(pdfDoc.getTitle() || '');
-    pdfDoc.setAuthor('');
-    pdfDoc.setProducer('CompressHub AI Engine');
-    pdfDoc.setCreator('CompressHub AI Engine');
 
-    // Save with stream object compression enabled
+    if (!settings.preserveMetadata) {
+      pdfDoc.setAuthor('');
+      pdfDoc.setProducer('CompressHub AI Engine');
+      pdfDoc.setCreator('CompressHub AI Engine');
+      pdfDoc.setSubject('');
+      pdfDoc.setKeywords([]);
+    }
+
+    // Re-saving with object streams enabled is a real (if modest) win —
+    // it de-duplicates and compresses the internal object table. It will
+    // never corrupt the file, unlike byte-slicing.
     const pdfBytes = await pdfDoc.save({
       useObjectStreams: true,
       addDefaultPage: false,
     });
 
-    let compressedBuffer = Buffer.from(pdfBytes);
+    const compressedBuffer = Buffer.from(pdfBytes);
 
-    // If original is larger and quality setting is low/balanced, attempt further stream deflating
-    if (compressedBuffer.length >= buffer.length) {
-      // Return modified stream with stripped metadata
-      const ratio = (settings.quality || 75) / 100;
-      const targetLength = Math.max(Math.floor(buffer.length * (0.5 + ratio * 0.4)), 1024);
-      if (targetLength < buffer.length) {
-        return compressedBuffer.subarray(0, targetLength);
-      }
-    }
-
-    return compressedBuffer;
+    // Only use the re-saved version if it's actually smaller or equal —
+    // otherwise keep the original untouched. No fallback byte-slicing.
+    return compressedBuffer.length <= buffer.length ? compressedBuffer : buffer;
   } catch (err) {
-    console.error('PDF compression fallback:', err);
-    // Fallback: return original buffer with minimal header strip
+    console.error('PDF compression error, returning original file untouched:', err);
     return buffer;
   }
 }
 
+// ---------------------------------------------------------------------------
 // Office Document (Word, Excel, PowerPoint) & ZIP compression engine
+// ---------------------------------------------------------------------------
 async function compressZipOrOffice(
   buffer: Buffer,
   filename: string,
@@ -197,7 +201,6 @@ async function compressZipOrOffice(
       const entryName = entry.entryName.toLowerCase();
       let entryBuffer = entry.getData();
 
-      // Check if entry is an embedded image inside docx/xlsx/pptx/zip
       if (['.jpg', '.jpeg', '.png'].some((ext) => entryName.endsWith(ext))) {
         try {
           const { buffer: compressedImg } = await compressImage(entryBuffer, entryName, {
@@ -215,88 +218,116 @@ async function compressZipOrOffice(
       newZip.addFile(entry.entryName, entryBuffer, entry.comment);
     }
 
-    // Zip compression output
     const outputBuffer = newZip.toBuffer();
-    // Return compressed buffer if smaller, else optimized original
-    if (outputBuffer.length < buffer.length) {
-      return outputBuffer;
-    } else {
-      // Smart fallback with slight stream trimming if equal
-      return outputBuffer;
-    }
+    return outputBuffer.length < buffer.length ? outputBuffer : buffer;
   } catch (err) {
-    console.error('ZIP/Office compression error:', err);
+    console.error('ZIP/Office compression error, returning original file untouched:', err);
     return buffer;
   }
 }
 
-// Media (Video / Audio) compression optimizer
+// ---------------------------------------------------------------------------
+// Media (Video / Audio) compression via ffmpeg
+//
+// IMPORTANT: the previous implementation sliced raw bytes off video/audio
+// files, which does NOT compress media — it produces a truncated, unplayable
+// file. Real compression requires re-encoding with a codec. This version
+// shells out to ffmpeg (must be installed on the host / container image).
+// If ffmpeg is not available, it returns the original file untouched rather
+// than producing a corrupt one.
+// ---------------------------------------------------------------------------
+function runFfmpeg(args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    proc.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    proc.on('error', (err) => reject(err)); // e.g. ffmpeg not installed
+    proc.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`ffmpeg exited with code ${code}: ${stderr.slice(-500)}`));
+    });
+  });
+}
+
+const RESOLUTION_HEIGHTS: Record<string, number | null> = {
+  '4k': 2160,
+  '2k': 1440,
+  '1080p': 1080,
+  '720p': 720,
+  '480p': 480,
+  '360p': 360,
+  original: null,
+};
+
 async function compressMedia(
   buffer: Buffer,
   filename: string,
+  category: 'video' | 'audio',
   settings: { quality?: number; targetSizeKb?: number; videoResolution?: string }
-): Promise<Buffer> {
-  const quality = settings.quality || 75;
-  const originalSize = buffer.length;
+): Promise<{ buffer: Buffer; ext: string }> {
+  const quality = settings.quality ?? 75;
+  const origExt = path.extname(filename) || (category === 'video' ? '.mp4' : '.mp3');
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'compresshub-'));
+  const inPath = path.join(tmpDir, `input${origExt}`);
+  const outExt = category === 'video' ? '.mp4' : '.m4a';
+  const outPath = path.join(tmpDir, `output${outExt}`);
 
-  // Resolution-based reduction factors (approximate pixel area ratios vs 4K)
-  const resolutionFactors: Record<string, number> = {
-    '4k':    1.00,   // 3840×2160 — keep full
-    '2k':    0.56,   // 2560×1440 — ~56% of 4K area
-    '1080p': 0.25,   // 1920×1080 — ~25% of 4K area
-    '720p':  0.11,   // 1280×720  — ~11% of 4K area
-    '480p':  0.05,   // 854×480   — ~5% of 4K area
-    '360p':  0.028,  // 640×360   — ~2.8% of 4K area
-    'original': 1.0,
-  };
+  try {
+    await fs.writeFile(inPath, buffer);
 
-  // Calculate target compression ratio based on quality preset
-  let reductionFactor = 0.65;
-  if (quality <= 40) {
-    reductionFactor = 0.35;
-  } else if (quality <= 70) {
-    reductionFactor = 0.55;
-  } else {
-    reductionFactor = 0.78;
-  }
+    const args = ['-y', '-i', inPath];
 
-  // Apply resolution downscale factor on top of quality factor
-  const res = settings.videoResolution || 'original';
-  if (res !== 'original' && resolutionFactors[res]) {
-    // Blend quality factor with resolution factor  
-    reductionFactor = Math.min(reductionFactor, resolutionFactors[res] * 1.2);
-  }
+    if (category === 'video') {
+      // Quality 0-100 -> CRF ~18 (best) to ~35 (smallest). Lower CRF = higher quality.
+      const crf = Math.round(35 - (quality / 100) * 17);
+      args.push('-c:v', 'libx264', '-crf', String(crf), '-preset', 'medium');
 
-  if (settings.targetSizeKb && settings.targetSizeKb > 0) {
-    const targetBytes = settings.targetSizeKb * 1024;
-    if (targetBytes < originalSize) {
-      reductionFactor = targetBytes / originalSize;
+      const targetHeight = RESOLUTION_HEIGHTS[settings.videoResolution || 'original'];
+      if (targetHeight) {
+        args.push('-vf', `scale=-2:'min(${targetHeight},ih)'`);
+      }
+
+      // If an explicit target size is given, use two-pass-style bitrate targeting instead of CRF.
+      if (settings.targetSizeKb && settings.targetSizeKb > 0) {
+        // Rough duration probe isn't done here to keep this dependency-light;
+        // fall back to a conservative average bitrate cap instead of CRF.
+        const targetBitrateKbps = Math.max(150, Math.floor((settings.targetSizeKb * 8) / 60)); // assumes ~60s if unknown
+        args.splice(args.indexOf('-crf'), 2); // remove crf flag pair
+        args.push('-b:v', `${targetBitrateKbps}k`, '-maxrate', `${targetBitrateKbps}k`, '-bufsize', `${targetBitrateKbps * 2}k`);
+      }
+
+      args.push('-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart');
+    } else {
+      // Audio: map quality to bitrate
+      const bitrateKbps = Math.round(64 + (quality / 100) * 192); // 64k - 256k
+      args.push('-c:a', 'aac', '-b:a', `${bitrateKbps}k`);
     }
-  }
 
-  const targetSize = Math.max(Math.floor(originalSize * reductionFactor), 1024);
-  
-  // Create optimized buffer stream while preserving header integrity
-  if (targetSize < originalSize) {
-    // Media optimization: retain valid container headers and sample data
-    const headerSize = Math.min(4096, originalSize);
-    const bodySize = targetSize - headerSize;
-    if (bodySize > 0) {
-      const header = buffer.subarray(0, headerSize);
-      const body = buffer.subarray(headerSize, headerSize + bodySize);
-      return Buffer.concat([header, body]);
-    }
-  }
+    args.push(outPath);
 
-  return buffer;
+    await runFfmpeg(args);
+    const resultBuffer = await fs.readFile(outPath);
+    return { buffer: resultBuffer, ext: outExt };
+  } catch (err) {
+    console.error('Media compression unavailable (ffmpeg missing or failed), returning original file untouched:', err);
+    return { buffer, ext: origExt };
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
+// ---------------------------------------------------------------------------
 // Health check endpoint
+// ---------------------------------------------------------------------------
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'CompressHub AI Engine', time: new Date().toISOString() });
 });
 
+// ---------------------------------------------------------------------------
 // Main Compression API Endpoint
+// ---------------------------------------------------------------------------
 app.post('/api/compress', upload.single('file'), async (req: Request, res: Response) => {
   const startTime = Date.now();
   try {
@@ -326,29 +357,29 @@ app.post('/api/compress', upload.single('file'), async (req: Request, res: Respo
       resultBuffer = imgRes.buffer;
       finalFormat = imgRes.format;
     } else if (category === 'pdf') {
-      resultBuffer = await compressPdf(buffer, { quality });
+      resultBuffer = await compressPdf(buffer, { quality, preserveMetadata });
     } else if (['word', 'excel', 'powerpoint', 'zip'].includes(category)) {
       resultBuffer = await compressZipOrOffice(buffer, originalname, { quality });
-    } else if (['video', 'audio'].includes(category)) {
-      resultBuffer = await compressMedia(buffer, originalname, { quality, targetSizeKb, videoResolution });
+    } else if (category === 'video' || category === 'audio') {
+      const mediaRes = await compressMedia(buffer, originalname, category, {
+        quality,
+        targetSizeKb,
+        videoResolution,
+      });
+      resultBuffer = mediaRes.buffer;
+      finalFormat = mediaRes.ext.replace('.', '');
     } else {
-      // General file compression
       resultBuffer = await compressZipOrOffice(buffer, originalname, { quality });
     }
 
-    // We removed the forceful trim block because slicing binary data corrupts images, zip files, and pdfs.
-    // The specific engines (compressImage, compressPdf, etc) are responsible for hitting target sizes legitimately.
-    
     const compressedSize = resultBuffer.length;
+    // Honest saving calculation: never floor to a fake minimum of 1%.
+    // If the file didn't actually shrink, report 0%.
     const savedBytes = Math.max(0, size - compressedSize);
-    const savedPercentage = Math.min(99, Math.max(1, Math.round((savedBytes / size) * 100)));
+    const savedPercentage = savedBytes > 0 ? Math.min(99, Math.round((savedBytes / size) * 100)) : 0;
     const processingTimeMs = Date.now() - startTime;
 
-    // Send compressed result back as base64 string + metadata for instant download
     const base64Data = resultBuffer.toString('base64');
-    
-    // Immediate memory cleanup
-    resultBuffer = Buffer.alloc(0);
 
     let finalMime = mimetype;
     if (category === 'image') {
@@ -357,6 +388,10 @@ app.post('/api/compress', upload.single('file'), async (req: Request, res: Respo
       else if (finalFormat === 'webp') finalMime = 'image/webp';
       else if (finalFormat === 'avif') finalMime = 'image/avif';
       else if (finalFormat === 'gif') finalMime = 'image/gif';
+    } else if (category === 'video') {
+      finalMime = finalFormat === 'mp4' ? 'video/mp4' : mimetype;
+    } else if (category === 'audio') {
+      finalMime = finalFormat === 'm4a' ? 'audio/mp4' : mimetype;
     }
 
     return res.json({
@@ -380,7 +415,9 @@ app.post('/api/compress', upload.single('file'), async (req: Request, res: Respo
   }
 });
 
-// Gemini AI analysis endpoint for smart settings recommendation
+// ---------------------------------------------------------------------------
+// AI analysis endpoint for smart settings recommendation (via OpenRouter)
+// ---------------------------------------------------------------------------
 app.post('/api/ai-analyze', upload.single('file'), async (req: Request, res: Response) => {
   try {
     const apiKey = process.env.OPENROUTER_API_KEY;
@@ -406,12 +443,12 @@ app.post('/api/ai-analyze', upload.single('file'), async (req: Request, res: Res
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
-        messages: [{ role: 'user', content: prompt }]
-      })
+        messages: [{ role: 'user', content: prompt }],
+      }),
     });
 
     if (!response.ok) {
@@ -419,7 +456,7 @@ app.post('/api/ai-analyze', upload.single('file'), async (req: Request, res: Res
     }
 
     const data = await response.json();
-    const text = data.choices[0]?.message?.content || '';
+    const text = data.choices?.[0]?.message?.content || '';
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
@@ -441,9 +478,7 @@ app.post('/api/ai-analyze', upload.single('file'), async (req: Request, res: Res
   }
 });
 
-
 async function startServer() {
-  // Only mount Vite in local development (not on Vercel)
   if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -451,7 +486,6 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else if (!process.env.VERCEL) {
-    // Only serve static files manually if NOT on Vercel
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req: Request, res: Response) => {
@@ -459,7 +493,6 @@ async function startServer() {
     });
   }
 
-  // Only listen on a port if NOT on Vercel
   if (!process.env.VERCEL) {
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`CompressHub AI Server running on http://0.0.0.0:${PORT}`);
