@@ -70,11 +70,18 @@ export function CompressorTool({
     else if (preset === 'low') setGlobalQuality(90);
   };
 
-  const getSettingsForFile = (): CompressionSettings => {
+  const getSettingsForFile = (fileSize?: number): CompressionSettings => {
+    let targetKb = customTargetKb ? parseFloat(customTargetKb) : undefined;
+    
+    // Enforce the estimated size as a target limit to ensure accuracy with the UI
+    if (!targetKb && fileSize) {
+      targetKb = (fileSize * (globalQuality / 100) * 0.85) / 1024;
+    }
+
     return {
       preset: globalPreset,
       quality: globalQuality,
-      targetSizeKb: customTargetKb ? parseFloat(customTargetKb) : undefined,
+      targetSizeKb: targetKb,
       preserveMetadata,
       outputFormat: outputFormat !== 'original' ? outputFormat : undefined,
     };
@@ -85,12 +92,12 @@ export function CompressorTool({
       ...item,
       status: 'processing',
       progress: 20,
-      settings: getSettingsForFile(),
+      settings: getSettingsForFile(item.size),
     };
     onUpdateFile(updatedItem);
 
     try {
-      const settings = getSettingsForFile();
+      const settings = getSettingsForFile(item.size);
       const res = await compressFileApi(item.file, settings);
 
       const completedItem: FileItem = {
