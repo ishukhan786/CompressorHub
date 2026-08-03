@@ -45,6 +45,7 @@ export function CompressorTool({
   const [preserveMetadata, setPreserveMetadata] = useState<boolean>(false);
   const [outputFormat, setOutputFormat] = useState<string>('original');
   const [videoResolution, setVideoResolution] = useState<string>('original');
+  const [compressionMode, setCompressionMode] = useState<'quality' | 'target'>('quality');
   const [isProcessingAll, setIsProcessingAll] = useState<boolean>(false);
 
   // Active modal comparison file
@@ -372,68 +373,121 @@ export function CompressorTool({
         </div>
 
         {/* Detailed Slider & Inputs */}
-        <div className="mt-6 pt-6 border-t border-slate-200/80 dark:border-white/10 grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Quality Slider */}
-          <div>
-            <div className="flex justify-between items-center text-xs font-semibold text-slate-700 dark:text-indigo-100 mb-2">
-              <span>Quality Factor:</span>
-              <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-400/30">
-                {globalQuality}%
-              </span>
-            </div>
-            <input
-              type="range"
-              min="10"
-              max="100"
-              value={globalQuality}
-              onChange={(e) => {
-                setGlobalQuality(parseInt(e.target.value));
-                setGlobalPreset('custom');
-              }}
-              className="w-full accent-indigo-600 dark:accent-indigo-400 cursor-pointer"
-            />
-            {totalOriginalSize > 0 && (
-              <div className="mt-2 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 py-1.5 rounded-lg border border-indigo-100 dark:border-indigo-500/20">
-                Estimated Size: ~{formatSize(totalOriginalSize * (globalQuality / 100) * 0.85)}
+        <div className="mt-6 pt-6 border-t border-slate-200/80 dark:border-white/10">
+
+          {/* Mode Toggle Switch */}
+          <div className="flex items-center gap-1 p-1 rounded-2xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 w-fit mb-5 shadow-inner">
+            <button
+              onClick={() => { setCompressionMode('quality'); setCustomTargetKb(''); }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 ${
+                compressionMode === 'quality'
+                  ? 'bg-white dark:bg-indigo-600 text-indigo-700 dark:text-white shadow-md border border-indigo-200 dark:border-indigo-500'
+                  : 'text-slate-500 dark:text-indigo-200/60 hover:text-slate-700 dark:hover:text-indigo-100'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${compressionMode === 'quality' ? 'bg-indigo-500 dark:bg-white' : 'bg-slate-300 dark:bg-white/20'}`}></span>
+              Quality Factor
+            </button>
+            <button
+              onClick={() => { setCompressionMode('target'); setGlobalQuality(75); }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-200 ${
+                compressionMode === 'target'
+                  ? 'bg-white dark:bg-indigo-600 text-indigo-700 dark:text-white shadow-md border border-indigo-200 dark:border-indigo-500'
+                  : 'text-slate-500 dark:text-indigo-200/60 hover:text-slate-700 dark:hover:text-indigo-100'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${compressionMode === 'target' ? 'bg-indigo-500 dark:bg-white' : 'bg-slate-300 dark:bg-white/20'}`}></span>
+              Target Size (KB)
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Quality Mode Panel */}
+            {compressionMode === 'quality' && (
+              <div className="md:col-span-1">
+                <div className="flex justify-between items-center text-xs font-semibold text-slate-700 dark:text-indigo-100 mb-2">
+                  <span>Quality Factor:</span>
+                  <span className="px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-400/30">
+                    {globalQuality}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="10"
+                  max="100"
+                  value={globalQuality}
+                  onChange={(e) => {
+                    setGlobalQuality(parseInt(e.target.value));
+                    setGlobalPreset('custom');
+                  }}
+                  className="w-full accent-indigo-600 dark:accent-indigo-400 cursor-pointer"
+                />
+                <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400 dark:text-indigo-200/40 px-0.5">
+                  <span>Maximum Compression</span>
+                  <span>Highest Quality</span>
+                </div>
+                {totalOriginalSize > 0 && (
+                  <div className="mt-3 text-center text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 py-2 rounded-xl border border-indigo-100 dark:border-indigo-500/20">
+                    📦 Estimated Output: ~{formatSize(totalOriginalSize * (globalQuality / 100) * 0.85)}
+                  </div>
+                )}
               </div>
             )}
-          </div>
 
-          {/* Custom Size KB Input */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-indigo-100 mb-2">
-              Target Size Limit (Optional KB):
-            </label>
-            <input
-              type="number"
-              placeholder="e.g. 500 KB"
-              value={customTargetKb}
-              onChange={(e) => {
-                setCustomTargetKb(e.target.value);
-                setGlobalPreset('custom');
-              }}
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-white/10 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-indigo-200/50 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 backdrop-blur-md"
-            />
-          </div>
+            {/* Target Size Mode Panel */}
+            {compressionMode === 'target' && (
+              <div className="md:col-span-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-indigo-100 mb-2">
+                  Set Exact Target Size:
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    placeholder="e.g. 500"
+                    value={customTargetKb}
+                    onChange={(e) => {
+                      setCustomTargetKb(e.target.value);
+                      setGlobalPreset('custom');
+                    }}
+                    className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-white/10 text-sm font-bold text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-indigo-200/40 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400"
+                  />
+                  <span className="px-3 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-400/20 text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                    KB
+                  </span>
+                </div>
+                {customTargetKb && (
+                  <div className="mt-3 text-center text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 py-2 rounded-xl border border-emerald-100 dark:border-emerald-500/20">
+                    🎯 Target: {parseFloat(customTargetKb) >= 1024
+                      ? `${(parseFloat(customTargetKb) / 1024).toFixed(2)} MB`
+                      : `${customTargetKb} KB`}
+                  </div>
+                )}
+                <p className="mt-2 text-[10px] text-slate-400 dark:text-indigo-200/40">
+                  File will be compressed to stay within this exact size limit.
+                </p>
+              </div>
+            )}
 
-          {/* Format Conversion Options */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-indigo-100 mb-2">
-              Convert Image Format:
-            </label>
-            <select
-              value={outputFormat}
-              onChange={(e) => setOutputFormat(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-slate-900/80 text-xs text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 backdrop-blur-md"
-            >
-              <option value="original">Keep Original Format</option>
-              <option value="webp">Convert to WebP (Recommended)</option>
-              <option value="avif">Convert to AVIF (Next-Gen)</option>
-              <option value="jpeg">Convert to JPEG</option>
-              <option value="png">Convert to PNG</option>
-            </select>
+            {/* Format Conversion Options — always visible */}
+            <div className={compressionMode === 'quality' ? 'md:col-span-1' : 'md:col-span-1'}>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-indigo-100 mb-2">
+                Convert Image Format:
+              </label>
+              <select
+                value={outputFormat}
+                onChange={(e) => setOutputFormat(e.target.value)}
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-slate-900/80 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400"
+              >
+                <option value="original">Keep Original Format</option>
+                <option value="webp">Convert to WebP (Recommended)</option>
+                <option value="avif">Convert to AVIF (Next-Gen)</option>
+                <option value="jpeg">Convert to JPEG</option>
+                <option value="png">Convert to PNG</option>
+              </select>
+            </div>
           </div>
         </div>
+
 
         {/* Video Resolution Selector — only visible when video files are in queue */}
         {files.some((f) => f.type === 'video') && (() => {
