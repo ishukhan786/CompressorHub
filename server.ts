@@ -125,7 +125,7 @@ async function compressImage(
       } else if (format === 'avif') {
         iterative = iterative.avif({ quality: currentQuality });
       } else {
-        iterative = iterative.toFormat(format as keyof sharp.FormatEnum);
+        iterative = iterative.toFormat(format as any);
       }
 
       outputBuffer = await iterative.toBuffer();
