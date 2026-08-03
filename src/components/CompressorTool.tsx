@@ -445,49 +445,151 @@ export function CompressorTool({
             ? firstVideo.videoHeight >= 2160 ? '4K' : firstVideo.videoHeight >= 1440 ? '2K' : firstVideo.videoHeight >= 1080 ? '1080p' : firstVideo.videoHeight >= 720 ? '720p' : firstVideo.videoHeight >= 480 ? '480p' : '360p'
             : null;
 
+          const resOptions = [
+            {
+              label: 'Original',
+              value: 'original',
+              dims: 'Keep Source',
+              gradient: 'from-slate-400 to-slate-500',
+              glow: 'shadow-slate-400/30',
+              ring: 'ring-slate-400/40',
+              textColor: 'text-slate-600 dark:text-slate-300',
+              tag: null,
+            },
+            {
+              label: '4K',
+              value: '4k',
+              dims: '3840×2160',
+              gradient: 'from-violet-500 to-fuchsia-600',
+              glow: 'shadow-violet-500/40',
+              ring: 'ring-violet-400/50',
+              textColor: 'text-violet-600 dark:text-violet-300',
+              tag: 'Ultra HD',
+            },
+            {
+              label: '2K',
+              value: '2k',
+              dims: '2560×1440',
+              gradient: 'from-purple-500 to-violet-600',
+              glow: 'shadow-purple-500/40',
+              ring: 'ring-purple-400/50',
+              textColor: 'text-purple-600 dark:text-purple-300',
+              tag: 'QHD',
+            },
+            {
+              label: '1080p',
+              value: '1080p',
+              dims: '1920×1080',
+              gradient: 'from-blue-500 to-indigo-600',
+              glow: 'shadow-blue-500/40',
+              ring: 'ring-blue-400/50',
+              textColor: 'text-blue-600 dark:text-blue-300',
+              tag: 'Full HD',
+            },
+            {
+              label: '720p',
+              value: '720p',
+              dims: '1280×720',
+              gradient: 'from-indigo-500 to-blue-600',
+              glow: 'shadow-indigo-500/40',
+              ring: 'ring-indigo-400/50',
+              textColor: 'text-indigo-600 dark:text-indigo-300',
+              tag: 'HD',
+            },
+            {
+              label: '480p',
+              value: '480p',
+              dims: '854×480',
+              gradient: 'from-emerald-500 to-teal-600',
+              glow: 'shadow-emerald-500/40',
+              ring: 'ring-emerald-400/50',
+              textColor: 'text-emerald-600 dark:text-emerald-300',
+              tag: 'SD',
+            },
+            {
+              label: '360p',
+              value: '360p',
+              dims: '640×360',
+              gradient: 'from-amber-500 to-orange-500',
+              glow: 'shadow-amber-500/40',
+              ring: 'ring-amber-400/50',
+              textColor: 'text-amber-600 dark:text-amber-300',
+              tag: 'Low',
+            },
+          ];
+
           return (
-          <div className="mt-5 pt-5 border-t border-slate-200/80 dark:border-white/10">
-            <div className="flex items-center justify-between mb-3">
-              <label className="text-xs font-semibold text-slate-700 dark:text-indigo-100 flex items-center gap-2">
-                <Film className="w-3.5 h-3.5 text-purple-500" />
-                Video Output Resolution:
-              </label>
-              {currentRes && (
-                <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-500/10 dark:text-purple-300 dark:border-purple-400/20">
-                  Current: {currentRes} ({currentResLabel})
-                </span>
+            <div className="mt-6 pt-5 border-t border-slate-200/80 dark:border-white/10">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4">
+                <label className="text-xs font-bold text-slate-700 dark:text-indigo-100 flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-lg bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center shadow-md shadow-purple-500/30">
+                    <Film className="w-3.5 h-3.5 text-white" />
+                  </span>
+                  Video Output Resolution
+                </label>
+                {currentRes && (
+                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-400/20">
+                    <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"></div>
+                    <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300">
+                      Source: {currentRes} ({currentResLabel})
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Resolution Cards Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+                {resOptions.map((res) => {
+                  const isActive = videoResolution === res.value;
+                  return (
+                    <button
+                      key={res.value}
+                      onClick={() => setVideoResolution(res.value)}
+                      className={`relative group flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all duration-200 overflow-hidden ${
+                        isActive
+                          ? `border-transparent bg-gradient-to-br ${res.gradient} shadow-lg ${res.glow} ring-2 ${res.ring} scale-[1.04]`
+                          : 'border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-white/5 hover:border-slate-300 dark:hover:border-white/20 hover:bg-white dark:hover:bg-white/10 hover:scale-[1.02] hover:shadow-md'
+                      }`}
+                    >
+                      {/* Shimmer on active */}
+                      {isActive && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 pointer-events-none" />
+                      )}
+
+                      {/* Resolution Label */}
+                      <span className={`text-base font-black tracking-tight ${isActive ? 'text-white' : 'text-slate-800 dark:text-white'}`}>
+                        {res.label}
+                      </span>
+
+                      {/* Dimensions */}
+                      <span className={`text-[9px] font-semibold leading-tight text-center ${isActive ? 'text-white/80' : 'text-slate-400 dark:text-indigo-200/50'}`}>
+                        {res.dims}
+                      </span>
+
+                      {/* Tag badge */}
+                      {res.tag && (
+                        <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-full border ${
+                          isActive
+                            ? 'bg-white/20 text-white border-white/30'
+                            : `${res.textColor} bg-slate-50 dark:bg-white/5 border-slate-200 dark:border-white/10`
+                        }`}>
+                          {res.tag}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Info hint */}
+              {videoResolution !== 'original' && (
+                <div className="mt-3 flex items-center gap-2 text-[10px] text-slate-500 dark:text-indigo-200/50 bg-slate-50 dark:bg-white/5 rounded-xl px-3 py-2 border border-slate-100 dark:border-white/5">
+                  <span className="text-amber-500">⚡</span>
+                  <span>Downscaling to <strong>{videoResolution}</strong> — file size will reduce significantly. Upscaling is not applied if source is already lower resolution.</span>
+                </div>
               )}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-              {[
-                { label: 'Original', value: 'original', badge: 'Keep', badgeColor: 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-white/10 dark:text-indigo-200 dark:border-white/20' },
-                { label: '4K', value: '4k', badge: '3840×2160', badgeColor: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-400/20' },
-                { label: '2K', value: '2k', badge: '2560×1440', badgeColor: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-500/10 dark:text-purple-300 dark:border-purple-400/20' },
-                { label: '1080p', value: '1080p', badge: 'FHD', badgeColor: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-400/20' },
-                { label: '720p', value: '720p', badge: 'HD', badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:border-indigo-400/20' },
-                { label: '480p', value: '480p', badge: 'SD', badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-400/20' },
-                { label: '360p', value: '360p', badge: 'Low', badgeColor: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-400/20' },
-              ].map((res) => (
-                <button
-                  key={res.value}
-                  onClick={() => setVideoResolution(res.value)}
-                  className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border text-center transition-all ${
-                    videoResolution === res.value
-                      ? 'border-indigo-500 bg-indigo-50/90 dark:border-indigo-400/60 dark:bg-indigo-500/20 ring-2 ring-indigo-400/40 shadow-sm'
-                      : 'border-slate-200 bg-white/80 hover:border-indigo-300 dark:border-white/10 dark:bg-white/5 dark:hover:border-indigo-400/50'
-                  }`}
-                >
-                  <span className="text-sm font-extrabold text-slate-900 dark:text-white">{res.label}</span>
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${res.badgeColor}`}>{res.badge}</span>
-                </button>
-              ))}
-            </div>
-            {videoResolution !== 'original' && (
-              <p className="mt-2 text-[10px] text-slate-500 dark:text-indigo-200/50">
-                ⚡ Video will be scaled down to {videoResolution} resolution. Upscaling is not applied if source is already lower.
-              </p>
-            )}
-          </div>
           );
         })()}
 
