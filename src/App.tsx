@@ -65,6 +65,11 @@ export default function App() {
   const handleFilesSelected = (files: File[]) => {
     const newItems: FileItem[] = files.map((file) => {
       const type = getCategoryFromMimeOrExt(file.name, file.type);
+      let previewUrl: string | undefined;
+      if (type === 'image' || type === 'video') {
+        previewUrl = URL.createObjectURL(file);
+      }
+      
       return {
         id: `file_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         file,
@@ -72,6 +77,7 @@ export default function App() {
         size: file.size,
         type,
         mimeType: file.type,
+        previewUrl,
         status: 'idle',
         progress: 0,
         originalSize: file.size,

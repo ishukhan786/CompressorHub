@@ -517,8 +517,16 @@ export function CompressorTool({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 {/* File Header Details */}
                 <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="p-3 rounded-xl bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/10 shrink-0">
-                    {getFileIcon(fileItem.type)}
+                  <div className="w-14 h-14 flex items-center justify-center p-0.5 rounded-xl bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/10 shrink-0 overflow-hidden relative">
+                    {fileItem.previewUrl ? (
+                      fileItem.type === 'video' ? (
+                        <video src={fileItem.previewUrl} className="w-full h-full object-cover rounded-lg" muted playsInline />
+                      ) : (
+                        <img src={fileItem.previewUrl} alt={fileItem.name} className="w-full h-full object-cover rounded-lg" />
+                      )
+                    ) : (
+                      getFileIcon(fileItem.type)
+                    )}
                   </div>
                   <div className="min-w-0">
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
