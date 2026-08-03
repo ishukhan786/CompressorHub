@@ -14,6 +14,7 @@ import { BlogPreview } from './components/BlogPreview';
 import { Footer } from './components/Footer';
 import { SEOMeta } from './components/SEOMeta';
 import { SitemapModal } from './components/SitemapModal';
+import { FeedbackWidget } from './components/FeedbackWidget';
 
 function getCategoryFromMimeOrExt(filename: string, mimeType: string): CompressorType {
   const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase();
@@ -230,6 +231,9 @@ export default function App() {
         isOpen={sitemapOpen}
         onClose={() => setSitemapOpen(false)}
       />
+
+      {/* Floating Feedback Widget */}
+      <FeedbackWidget />
     </div>
   );
 }

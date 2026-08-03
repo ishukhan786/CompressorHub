@@ -433,6 +433,38 @@ app.post('/api/ai-analyze', upload.single('file'), async (req: Request, res: Res
   }
 });
 
+// Feedback Endpoint
+app.post('/api/feedback', express.json(), async (req: Request, res: Response) => {
+  try {
+    const fs = await import('fs/promises');
+    const feedbackPath = path.join(process.cwd(), 'feedback.json');
+    let feedback = [];
+    
+    try {
+      const data = await fs.readFile(feedbackPath, 'utf-8');
+      feedback = JSON.parse(data);
+    } catch (e) {
+      // File doesn't exist yet
+    }
+    
+    const newFeedback = {
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      name: req.body.name || 'Anonymous',
+      email: req.body.email || '',
+      message: req.body.message || '',
+    };
+    
+    feedback.push(newFeedback);
+    await fs.writeFile(feedbackPath, JSON.stringify(feedback, null, 2));
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Feedback Error:', err);
+    res.status(500).json({ error: 'Failed to save feedback' });
+  }
+});
+
 async function startServer() {
   // Only mount Vite in local development (not on Vercel)
   if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
