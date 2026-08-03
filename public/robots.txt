@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://compressorhub-ai.vercel.app/sitemap.xml
+Sitemap: https://compresshub-ai.vercel.app/sitemap.xml
