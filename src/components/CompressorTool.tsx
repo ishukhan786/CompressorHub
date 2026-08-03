@@ -485,17 +485,11 @@ export function CompressorTool({
                     <h4 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
                       {fileItem.name}
                     </h4>
-                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-indigo-200/70 mt-0.5">
-                      <span>Original: {formatSize(fileItem.originalSize)}</span>
-                      {isCompleted && (
-                        <>
-                          <span>•</span>
-                          <span className="font-bold text-indigo-700 dark:text-indigo-300">
-                            Compressed: {formatSize(fileItem.compressedSize || 0)}
-                          </span>
-                        </>
-                      )}
-                    </div>
+                    {!isCompleted && (
+                      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-indigo-200/70 mt-0.5">
+                        <span>Size: {formatSize(fileItem.originalSize)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -569,6 +563,30 @@ export function CompressorTool({
                     className="bg-gradient-to-r from-indigo-500 to-purple-500 dark:from-indigo-400 dark:to-purple-400 h-full transition-all duration-300 shadow-sm"
                     style={{ width: `${fileItem.progress}%` }}
                   ></div>
+                </div>
+              )}
+
+              {/* Detailed Result Card for Completed Files */}
+              {isCompleted && (
+                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-white/5 animate-fade-in">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-slate-50 dark:bg-black/20 rounded-xl p-3 border border-slate-100 dark:border-white/5">
+                      <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-indigo-200/50 mb-1">Original Size</p>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{formatSize(fileItem.originalSize)}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-black/20 rounded-xl p-3 border border-slate-100 dark:border-white/5">
+                      <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-indigo-200/50 mb-1">New Size</p>
+                      <p className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{formatSize(fileItem.compressedSize || 0)}</p>
+                    </div>
+                    <div className="bg-emerald-50 dark:bg-emerald-500/10 rounded-xl p-3 border border-emerald-100 dark:border-emerald-500/20">
+                      <p className="text-[10px] uppercase tracking-wider font-bold text-emerald-600/70 dark:text-emerald-400/70 mb-1">Space Saved</p>
+                      <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">{fileItem.savedPercentage}% ({(fileItem.originalSize - (fileItem.compressedSize || 0)) > 0 ? formatSize(fileItem.originalSize - (fileItem.compressedSize || 0)) : '0 B'})</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-black/20 rounded-xl p-3 border border-slate-100 dark:border-white/5">
+                      <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-indigo-200/50 mb-1">Time Taken</p>
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{fileItem.processingTimeMs ? `${(fileItem.processingTimeMs / 1000).toFixed(2)}s` : '< 0.1s'}</p>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
