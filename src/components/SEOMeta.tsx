@@ -6,7 +6,7 @@ export function SEOMeta() {
     const schemaData = {
       '@context': 'https://schema.org',
       '@type': 'SoftwareApplication',
-      name: 'CompressHub AI',
+      name: 'Compressor Hub',
       operatingSystem: 'All',
       applicationCategory: 'MultimediaApplication',
       offers: {
