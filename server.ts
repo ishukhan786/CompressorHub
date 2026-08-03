@@ -98,13 +98,18 @@ async function compressImage(
     let currentQuality = quality;
     let currentScale = 1.0;
 
-    while (outputBuffer.length > targetBytes && currentQuality > 15) {
-      currentQuality = Math.max(10, currentQuality - 15);
+    // Aggressive loop to hit target size safely without corrupting the file
+    while (outputBuffer.length > targetBytes && (currentQuality > 5 || currentScale > 0.1)) {
+      if (currentQuality > 10) {
+        currentQuality = Math.max(5, currentQuality - 15);
+      } else {
+        currentScale = Math.max(0.1, currentScale - 0.2);
+      }
+      
       let iterative = sharp(buffer, { failOn: 'none' });
       if (settings.preserveMetadata) iterative = iterative.withMetadata();
 
-      if (outputBuffer.length > targetBytes * 1.5 && currentScale > 0.4) {
-        currentScale -= 0.15;
+      if (currentScale < 1.0) {
         const metadata = await sharp(buffer).metadata();
         if (metadata.width && metadata.height) {
           iterative = iterative.resize(Math.round(metadata.width * currentScale));
@@ -116,9 +121,12 @@ async function compressImage(
       } else if (format === 'webp') {
         iterative = iterative.webp({ quality: currentQuality });
       } else if (format === 'png') {
-        iterative = iterative.png({ palette: true, quality: currentQuality });
+        // PNG doesn't respond well to quality drops, relies heavily on scaling
+        iterative = iterative.png({ palette: true, colors: Math.max(16, currentQuality * 2) });
       } else if (format === 'avif') {
         iterative = iterative.avif({ quality: currentQuality });
+      } else {
+        iterative = iterative.toFormat(format as any);
       }
 
       outputBuffer = await iterative.toBuffer();
@@ -328,18 +336,9 @@ app.post('/api/compress', upload.single('file'), async (req: Request, res: Respo
       resultBuffer = await compressZipOrOffice(buffer, originalname, { quality });
     }
 
-    // Enforce strict size constraint (either targetSizeKb or original size)
-    let limit = size;
-    if (targetSizeKb && targetSizeKb > 0) {
-      limit = Math.min(size, targetSizeKb * 1024);
-    }
+    // We removed the forceful trim block because slicing binary data corrupts images, zip files, and pdfs.
+    // The specific engines (compressImage, compressPdf, etc) are responsible for hitting target sizes legitimately.
     
-    if (resultBuffer.length > limit) {
-      // Forcefully trim to ensure strict target adherence
-      const trimmedSize = Math.max(Math.floor(limit * 0.95), 512);
-      resultBuffer = resultBuffer.subarray(0, trimmedSize);
-    }
-
     const compressedSize = resultBuffer.length;
     const savedBytes = Math.max(0, size - compressedSize);
     const savedPercentage = Math.min(99, Math.max(1, Math.round((savedBytes / size) * 100)));
