@@ -37,6 +37,7 @@ export interface FileItem {
   compressedUrl?: string;
   error?: string;
   processingTimeMs?: number;
+  finalFormat?: string;
   settings: CompressionSettings;
 }
 

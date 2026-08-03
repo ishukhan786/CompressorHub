@@ -102,6 +102,7 @@ export function CompressorTool({
         savedPercentage: res.savedPercentage,
         compressedUrl: res.dataUrl,
         processingTimeMs: res.processingTimeMs,
+        finalFormat: res.finalFormat,
         settings,
       };
       onUpdateFile(completedItem);
@@ -130,7 +131,11 @@ export function CompressorTool({
     if (!item.compressedUrl) return;
     const a = document.createElement('a');
     a.href = item.compressedUrl;
-    const ext = item.settings.outputFormat || item.name.split('.').pop() || 'file';
+    
+    const origExt = item.name.split('.').pop()?.toLowerCase() || 'file';
+    let ext = item.settings.outputFormat || item.finalFormat || origExt;
+    if (ext === 'jpeg' && origExt === 'jpg') ext = 'jpg';
+
     const baseName = item.name.substring(0, item.name.lastIndexOf('.')) || item.name;
     a.download = `${baseName}_compressed.${ext}`;
     document.body.appendChild(a);
@@ -146,7 +151,11 @@ export function CompressorTool({
       const zip = new JSZip();
       for (const fileItem of completedFiles) {
         if (!fileItem.compressedUrl) continue;
-        const ext = fileItem.settings.outputFormat || fileItem.name.split('.').pop() || 'file';
+        
+        const origExt = fileItem.name.split('.').pop()?.toLowerCase() || 'file';
+        let ext = fileItem.settings.outputFormat || fileItem.finalFormat || origExt;
+        if (ext === 'jpeg' && origExt === 'jpg') ext = 'jpg';
+
         const baseName = fileItem.name.substring(0, fileItem.name.lastIndexOf('.')) || fileItem.name;
         const fileName = `${baseName}_compressed.${ext}`;
 
