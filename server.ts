@@ -13,6 +13,8 @@ import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 import AdmZip from 'adm-zip';
 import { createServer as createViteServer } from 'vite';
+// @ts-ignore
+import ffmpegPath from 'ffmpeg-static';
 
 // --- Types & Interfaces ---
 interface CompressionSettings {
@@ -259,7 +261,7 @@ async function compressZipOrOffice(buffer: Buffer, filename: string, settings: C
 
 function runFfmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    const proc = spawn(ffmpegPath || 'ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
     proc.on('error', (err) => reject(err));
