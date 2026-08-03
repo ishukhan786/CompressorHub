@@ -160,19 +160,26 @@ export function CompressorTool({
     if (!item.compressedUrl) return;
     
     try {
-      // Fetching the base64 data url to convert it into a Blob natively
-      const response = await fetch(item.compressedUrl);
-      const blob = await response.blob();
+      const origExt = item.name.split('.').pop()?.toLowerCase() || 'file';
+      let ext = item.settings.outputFormat || item.finalFormat || origExt;
+      if (ext === 'jpeg' && origExt === 'jpg') ext = 'jpg';
+
+      // Bulletproof Base64 to Blob converter
+      const parts = item.compressedUrl.split(',');
+      const mime = parts[0].match(/:(.*?);/)?.[1] || 'application/octet-stream';
+      const bstr = atob(parts[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      const blob = new Blob([u8arr], { type: mime });
       const url = URL.createObjectURL(blob);
       
       const a = document.createElement('a');
       a.style.display = 'none';
       a.href = url;
       
-      const origExt = item.name.split('.').pop()?.toLowerCase() || 'file';
-      let ext = item.settings.outputFormat || item.finalFormat || origExt;
-      if (ext === 'jpeg' && origExt === 'jpg') ext = 'jpg';
-
       const baseName = item.name.substring(0, item.name.lastIndexOf('.')) || item.name;
       a.download = `${baseName}_compressed.${ext}`;
       
@@ -186,7 +193,7 @@ export function CompressorTool({
       }, 150);
     } catch (err) {
       console.error('Download error:', err);
-      // Fallback for older browsers
+      // Absolute fallback
       const a = document.createElement('a');
       a.href = item.compressedUrl;
       const baseName = item.name.substring(0, item.name.lastIndexOf('.')) || item.name;
