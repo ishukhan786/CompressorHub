@@ -1,0 +1,6 @@
+{
+  "name": "CompressHub AI",
+  "description": "Modern, privacy-first, ultra-fast file compression engine for images, PDFs, videos, audio, zip, and documents.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
